@@ -1,0 +1,648 @@
+<title>SCM Weekly Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 상단 컨트롤 바 → KPI 띠 → 표·차트 섹션. 운영 리포트처럼 촘촘하게, 강조색은 한 가지 */
+:root {
+  --bg: #f6f6f3;
+  --panel: #ffffff;
+  --panel-2: #efefea;
+  --line: #e1e0d9;
+  --fg: #16181a;
+  --fg-2: #4f5256;
+  --fg-3: #7d8085;
+  --accent: #0f6e78;
+  --accent-soft: #d5ebec;
+  --accent-ink: #ffffff;
+  --up: #1d7a33;
+  --down: #c0392b;
+  --warn-bg: #fdf3dc;
+  --series: #0f6e78;
+  --series-soft: #a7d2d5;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121414; --panel: #1b1e1e; --panel-2: #242828; --line: #313636;
+    --fg: #eef0ee; --fg-2: #bfc4c2; --fg-3: #8d9391;
+    --accent: #4fb3bd; --accent-soft: #1d3c3f; --accent-ink: #0c1414;
+    --up: #5cc777; --down: #ef7b6e; --warn-bg: #3a3018;
+    --series: #4fb3bd; --series-soft: #275a5f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121414; --panel: #1b1e1e; --panel-2: #242828; --line: #313636;
+  --fg: #eef0ee; --fg-2: #bfc4c2; --fg-3: #8d9391;
+  --accent: #4fb3bd; --accent-soft: #1d3c3f; --accent-ink: #0c1414;
+  --up: #5cc777; --down: #ef7b6e; --warn-bg: #3a3018;
+  --series: #4fb3bd; --series-soft: #275a5f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 16px 48px; }
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.muted { color: var(--fg-3); }
+.small { font-size: 12px; }
+
+.bar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.brand h1 { font-size: 19px; letter-spacing: -0.01em; }
+.brand p { margin: 2px 0 0; color: var(--fg-2); font-size: 12.5px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--fg-3); letter-spacing: 0.02em; }
+select, input[type="date"], textarea, .btn {
+  font: inherit; font-size: 13px; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-height: 34px;
+}
+textarea { width: 100%; min-height: 110px; font-family: var(--font-num); font-size: 12.5px; resize: vertical; }
+.btn { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { background: var(--panel-2); }
+.btn:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, .seg button:focus-visible, .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--panel); }
+.seg button { font: inherit; font-size: 13px; border: 0; background: none; color: var(--fg-2); padding: 7px 14px; cursor: pointer; min-height: 34px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+.gen { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; }
+.gen-row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--fg-2); min-height: 34px; }
+.progress { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.status { font-size: 12.5px; color: var(--fg-2); }
+.status.err { color: var(--down); }
+.note { padding: 10px 12px; border-radius: 8px; font-size: 13px; background: var(--accent-soft); color: var(--fg); }
+.note.warn { background: var(--warn-bg); }
+
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-top: 18px; overflow-x: auto; }
+.tabs button { font: inherit; background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; color: var(--fg-2); cursor: pointer; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+
+.meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 14px 0 4px; font-size: 12px; color: var(--fg-3); }
+.meta b { color: var(--fg-2); font-weight: 500; }
+
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.kpi .lbl { font-size: 12px; color: var(--fg-2); }
+.kpi .val { font-family: var(--font-num); font-size: 24px; font-weight: 500; letter-spacing: -0.02em; margin: 4px 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .val small { font-size: 12px; color: var(--fg-3); margin-left: 4px; font-family: var(--font-body); }
+.kpi dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; font-size: 12px; }
+.kpi dt { color: var(--fg-3); }
+.kpi dd { margin: 0; text-align: right; font-family: var(--font-num); white-space: nowrap; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.flat { color: var(--fg-3); }
+
+.sec { margin-top: 26px; }
+.sec-h { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.sec-h h2 { font-size: 15px; }
+.sec-h span { font-size: 12px; color: var(--fg-3); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.card h3 { font-size: 13px; color: var(--fg-2); font-weight: 600; margin-bottom: 8px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.chart { position: relative; height: 280px; }
+.chart.short { height: 220px; }
+
+.tw { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { font-size: 11.5px; font-weight: 600; color: var(--fg-2); background: var(--panel-2); white-space: nowrap; letter-spacing: 0.01em; }
+td.r, th.r { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+th.r { font-family: var(--font-body); }
+tbody tr:hover td { background: var(--panel-2); }
+tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
+.barcell { position: relative; min-width: 140px; }
+.barcell i { position: absolute; left: 10px; top: 50%; height: 7px; margin-top: -3px; border-radius: 0 4px 4px 0; background: var(--series-soft); }
+.barcell span { position: relative; }
+.tag { display: inline-block; padding: 0 7px; border-radius: 10px; font-size: 11px; line-height: 18px; background: var(--panel-2); color: var(--fg-2); border: 1px solid var(--line); white-space: nowrap; }
+.tag.ex { background: var(--accent-soft); border-color: transparent; color: var(--fg); }
+.empty { text-align: center; padding: 48px 20px; color: var(--fg-2); }
+.empty h2 { font-size: 18px; margin-bottom: 6px; color: var(--fg); }
+.pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.pick button { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); color: var(--fg-2); cursor: pointer; }
+.pick button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.settings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.settings label { display: block; font-size: 12.5px; font-weight: 600; color: var(--fg-2); margin-bottom: 4px; }
+.settings p { margin: 4px 0 0; font-size: 12px; color: var(--fg-3); }
+
+@media (max-width: 1080px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .settings { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 720px) {
+  .wrap { padding-inline: 16px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .progress > div { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="bar">
+    <div class="brand">
+      <h1>SCM Weekly Report</h1>
+      <p>ELLIS 예약 데이터로 만드는 주간 보고 · 체크아웃 기준 연간 누적</p>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="국가">
+        <button type="button" data-cc="VN" aria-pressed="true">베트남</button>
+        <button type="button" data-cc="TH" aria-pressed="false">태국</button>
+      </div>
+      <label class="field">저장된 보고서
+        <select id="sel-report"></select>
+      </label>
+      <button class="btn" type="button" id="btn-toggle-gen">새 보고서 만들기</button>
+    </div>
+  </header>
+
+  <section class="gen" id="gen" hidden>
+    <div class="gen-row">
+      <label class="field">기준일 (이 날까지 들어온 예약)
+        <input type="date" id="in-date" min="2024-01-01" max="2099-12-31">
+      </label>
+      <label class="check"><input type="checkbox" id="in-ly"> 전년 동기 포함 (조회 시간 약 2배)</label>
+      <button class="btn primary" type="button" id="btn-run">ELLIS에서 생성</button>
+      <button class="btn" type="button" id="btn-cancel" hidden>중지</button>
+    </div>
+    <div class="progress" aria-hidden="true"><div id="prog"></div></div>
+    <div class="status" id="gen-status" role="status" aria-live="polite">국가와 기준일을 고르고 생성을 누르세요. 베트남은 2~4분 정도 걸립니다.</div>
+  </section>
+
+  <div id="view"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>/*ENGINE*/</script>
+<script>
+(function () {
+  'use strict';
+  var SERVER = 'ELLIS_MCP';
+  var TOOL = 'get_hotel_bookings';
+  var PAGE = 500, PARALLEL = 4;
+  var CC_NAME = { VN: '베트남', TH: '태국' };
+  var MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+
+  var $ = function (s, el) { return (el || document).querySelector(s); };
+  var $$ = function (s, el) { return Array.prototype.slice.call((el || document).querySelectorAll(s)); };
+
+  var st = { cc: 'VN', reports: {}, current: null, tab: 'summary', settings: null, db: null, mcp: null, canWrite: true, charts: [], hbPick: null, abort: null };
+
+  /* ---------- 포맷 ---------- */
+  var nf0 = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 });
+  var nfC = new Intl.NumberFormat('ko-KR', { notation: 'compact', maximumFractionDigits: 1 });
+  function isN(v) { return typeof v === 'number' && isFinite(v); }
+  function fi(v) { return isN(v) ? nf0.format(v) : '–'; }
+  function fm(v) { return isN(v) ? nfC.format(v) : '–'; }
+  function fp(v, d) { return isN(v) ? (v * 100).toFixed(d == null ? 1 : d) + '%' : '–'; }
+  function mr(x) { return x && x.sell ? x.margin / x.sell : null; }
+  function sg(v) { return v > 0 ? '+' : v < 0 ? '−' : '±'; }
+  function delta(v, kind) {
+    if (!isN(v)) return '<span class="flat">–</span>';
+    var c = v > 0 ? 'up' : v < 0 ? 'down' : 'flat', a = Math.abs(v);
+    var body = kind === 'pp' ? (a * 100).toFixed(2) + '%p' : kind === 'm' ? nfC.format(a) : nf0.format(a);
+    return '<span class="' + c + '">' + (v > 0 ? '▲ ' : v < 0 ? '▼ ' : '') + sg(v) + body + '</span>';
+  }
+  function pct(cur, base) {
+    if (!isN(cur) || !isN(base) || !base) return '';
+    var p = (cur - base) / Math.abs(base);
+    return ' <span class="muted">(' + sg(p) + Math.abs(p * 100).toFixed(1) + '%)</span>';
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function todaySeoul() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+
+  /* ---------- 저장소 ---------- */
+  function defaults() { return { VN: { regions: [], aliases: {}, hotels: [] }, TH: { regions: [], aliases: {}, hotels: [] } }; }
+  function cfgOf(cc) { var s = st.settings || defaults(); return s[cc] || { regions: [], aliases: {}, hotels: [] }; }
+
+  function listenDb() {
+    if (!st.db) return;
+    st.db.doc('config/settings').onSnapshot(function (snap) {
+      st.settings = snap.exists ? snap.data() : defaults();
+      if (st.tab === 'settings') render();
+    }, function () {});
+    st.db.collection('reports').onSnapshot(function (snap) {
+      var all = {};
+      snap.docs.forEach(function (d) { var v = d.data(); if (v && v.country) all[d.id] = v; });
+      st.reports = all;
+      var list = listFor(st.cc);
+      if (!st.current || !all[st.current]) st.current = list.length ? list[0].id : null;
+      render();
+    }, function (e) { setStatus('저장된 보고서를 불러오지 못했습니다 (' + e.code + ').', true); });
+  }
+  function listFor(cc) {
+    return Object.keys(st.reports).map(function (id) { return { id: id, r: st.reports[id] }; })
+      .filter(function (x) { return x.r.country === cc; })
+      .sort(function (a, b) { return b.r.date.localeCompare(a.r.date); });
+  }
+
+  /* ---------- ELLIS 조회 ---------- */
+  function setStatus(msg, err) { var el = $('#gen-status'); el.textContent = msg; el.classList.toggle('err', !!err); }
+  function setProg(p) { $('#prog').style.width = Math.round(p * 100) + '%'; }
+
+  function errText(e) {
+    var c = e && e.code;
+    if (c === 'server_not_connected' || c === 'selection_required') return 'ELLIS 커넥터가 연결되어 있지 않습니다. claude.ai 설정 → 커넥터에서 ELLIS를 추가한 뒤 다시 시도하세요.';
+    if (c === 'needs_reauth') return 'ELLIS 로그인이 만료되었습니다. claude.ai 설정 → 커넥터에서 ELLIS를 다시 연결하세요.';
+    if (c === 'not_in_manifest' || c === 'not_granted' || c === 'consent_required') return '이 페이지에 ELLIS 사용이 허용되지 않았습니다. 페이지 상단의 권한 요청에서 허용해 주세요.';
+    if (c === 'blocked_by_policy') return '조직 정책으로 이 계정은 ELLIS 예약 조회가 막혀 있습니다.';
+    if (c === 'cancelled') return '중지했습니다.';
+    if (c === 'tool_error') return 'ELLIS가 오류를 돌려줬습니다: ' + (e.message || '');
+    return 'ELLIS 조회 중 오류가 났습니다 (' + (c || 'unknown') + '): ' + (e && e.message ? e.message : '');
+  }
+
+  function call(args, signal) {
+    return st.mcp.callTool(SERVER, TOOL, args, { cache: false, signal: signal }).then(function (res) {
+      var p = res && res.payload;
+      if (typeof p === 'string') { try { p = JSON.parse(p); } catch (x) { throw { code: 'tool_error', message: p.slice(0, 200) }; } }
+      if (!p || !Array.isArray(p.list)) throw { code: 'tool_error', message: '예상과 다른 응답 형식' };
+      return p;
+    }).catch(function (e) {
+      if (e && e.retryable) {
+        return new Promise(function (ok) { setTimeout(ok, (e.retryAfterMs || 1500) + Math.random() * 1000); })
+          .then(function () { return st.mcp.callTool(SERVER, TOOL, args, { cache: false, signal: signal }); })
+          .then(function (res) { var p = res.payload; if (typeof p === 'string') p = JSON.parse(p); return p; });
+      }
+      throw e;
+    });
+  }
+
+  // 작업 큐를 PARALLEL 개씩 처리. 첫 페이지에서 totalCount를 보고 나머지 페이지를 큐에 추가
+  function fetchAll(cc, plan, signal, onProgress) {
+    var rows = { main: [], ly: [] }, queue = [], done = 0, total = plan.length, got = 0;
+    plan.forEach(function (w) { queue.push({ w: w, offset: 0 }); });
+    return new Promise(function (resolve, reject) {
+      var active = 0, failed = false;
+      function next() {
+        if (failed) return;
+        if (!queue.length && !active) return resolve(rows);
+        while (active < PARALLEL && queue.length) run(queue.shift());
+      }
+      function run(job) {
+        active++;
+        call({ dateBasis: 'CHECK_OUT_DATE', fromDate: job.w.from, toDate: job.w.to, countryCode: cc, limit: PAGE, offset: job.offset }, signal)
+          .then(function (p) {
+            var bucket = job.w.ly ? rows.ly : rows.main;
+            for (var i = 0; i < p.list.length; i++) bucket.push(SCM.slimRow(p.list[i]));
+            got += p.list.length;
+            if (job.offset === 0 && p.totalCount > PAGE) {
+              for (var o = PAGE; o < p.totalCount; o += PAGE) { queue.push({ w: job.w, offset: o }); total++; }
+            }
+            done++; active--;
+            onProgress(done, total, got);
+            next();
+          })
+          .catch(function (e) { failed = true; active--; reject(e); });
+      }
+      next();
+    });
+  }
+
+  function generate() {
+    if (!st.mcp) { setStatus('이 화면에서는 ELLIS를 조회할 수 없습니다. claude.ai에서 페이지를 열어 주세요.', true); return; }
+    var D = $('#in-date').value;
+    if (!D || !$('#in-date').validity.valid) { setStatus('기준일을 입력하세요.', true); return; }
+    var withLy = $('#in-ly').checked, cc = st.cc;
+    var plan = SCM.fetchPlan(D, withLy);
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    st.abort = ctrl;
+    $('#btn-run').disabled = true; $('#btn-cancel').hidden = false;
+    setProg(0); setStatus(CC_NAME[cc] + ' · ' + D + ' 기준으로 ELLIS 조회를 시작합니다…');
+    var t0 = Date.now();
+    fetchAll(cc, plan, ctrl && ctrl.signal, function (done, total, got) {
+      setProg(done / total);
+      setStatus('ELLIS 조회 중 · ' + done + '/' + total + '회 · 예약 ' + nf0.format(got) + '건 · ' + Math.round((Date.now() - t0) / 1000) + '초');
+    }).then(function (rows) {
+      setStatus('집계 중…');
+      var rep = SCM.compute(rows.main, { country: cc, date: D, cfg: cfgOf(cc), lyRows: withLy ? rows.ly : null });
+      rep.secs = Math.round((Date.now() - t0) / 1000);
+      var id = cc + '_' + D;
+      st.reports[id] = rep; st.current = id; render();
+      if (!st.db) { setStatus('완료했지만 저장할 수 없는 화면이라 이번 방문에서만 보입니다.', true); return; }
+      return st.db.doc('reports/' + id).set(rep).then(function () {
+        setStatus('완료 · 예약 ' + nf0.format(rep.diag.unique) + '건 · ' + rep.secs + '초 · 저장했습니다. 팀원은 저장된 보고서에서 볼 수 있습니다.');
+      }, function (e) {
+        setStatus('보고서는 만들었지만 저장하지 못했습니다 (' + e.code + '). ' + (e.code === 'invalid_argument' ? '이 페이지에 쓰기 권한이 없을 수 있습니다.' : ''), true);
+      });
+    }).catch(function (e) { setStatus(errText(e), true); })
+      .then(function () { $('#btn-run').disabled = false; $('#btn-cancel').hidden = true; st.abort = null; });
+  }
+
+  /* ---------- 공통 렌더 ---------- */
+  function killCharts() { st.charts.forEach(function (c) { c.destroy(); }); st.charts = []; }
+  function chart(el, cfg) { if (!el || typeof Chart === 'undefined') return; st.charts.push(new Chart(el, cfg)); }
+  function chartBase() {
+    if (typeof Chart === 'undefined') return;
+    Chart.defaults.font.family = css('--font-body');
+    Chart.defaults.font.size = 12;
+    Chart.defaults.color = css('--fg-2');
+    Chart.defaults.borderColor = css('--line');
+    Chart.defaults.maintainAspectRatio = false;
+    Chart.defaults.plugins.legend.display = false;
+    var t = Chart.defaults.plugins.tooltip;
+    t.backgroundColor = css('--panel'); t.titleColor = css('--fg'); t.bodyColor = css('--fg-2'); t.borderColor = css('--line'); t.borderWidth = 1; t.padding = 10;
+  }
+  var barOpt = { borderRadius: 4, borderSkipped: 'start', maxBarThickness: 22 };
+
+  function table(cols, rows, foot) {
+    var h = '<div class="tw"><table><thead><tr>' + cols.map(function (c) { return '<th class="' + (c.r ? 'r' : '') + '">' + esc(c.t) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    h += rows.length ? rows.map(function (x, i) { return '<tr>' + cols.map(function (c) { return '<td class="' + (c.r ? 'r ' : '') + (c.cls || '') + '">' + c.v(x, i) + '</td>'; }).join('') + '</tr>'; }).join('')
+      : '<tr><td colspan="' + cols.length + '" class="muted">해당 항목이 없습니다</td></tr>';
+    h += '</tbody>' + (foot ? '<tfoot><tr>' + foot.map(function (f, i) { return '<td class="' + (cols[i].r ? 'r' : '') + '">' + f + '</td>'; }).join('') + '</tr></tfoot>' : '') + '</table></div>';
+    return h;
+  }
+  function barCell(v, max, txt) { var w = max > 0 && isN(v) ? Math.max(0, v / max) : 0; return '<i style="width:calc((100% - 90px) * ' + w.toFixed(4) + ')"></i><span>' + txt + '</span>'; }
+  function sec(title, body, aside) { return '<section class="sec"><div class="sec-h"><h2>' + esc(title) + '</h2>' + (aside ? '<span>' + aside + '</span>' : '') + '</div>' + body + '</section>'; }
+  function ctTag(ct) { return ct ? '<span class="tag' + (/exclusive/i.test(ct) ? ' ex' : '') + '">' + esc(ct.replace(/ Rate$/, '')) + '</span>' : ''; }
+
+  function render() {
+    killCharts(); chartBase();
+    $$('.seg button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.cc === st.cc)); });
+    var list = listFor(st.cc);
+    if (st.current && (!st.reports[st.current] || st.reports[st.current].country !== st.cc)) st.current = list.length ? list[0].id : null;
+    var sel = $('#sel-report');
+    sel.innerHTML = list.length ? list.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === st.current ? ' selected' : '') + '>' + esc(x.r.date) + ' 기준</option>'; }).join('') : '<option value="">저장된 보고서 없음</option>';
+    sel.disabled = !list.length;
+    var r = st.current ? st.reports[st.current] : null;
+    var v = $('#view');
+    var tabs = [['summary', '주간 실적'], ['movers', '신규·급감속'], ['hb', '독점·HB 호텔'], ['trend', '주차 추이'], ['settings', '설정']];
+    var tabHtml = '<nav class="tabs" role="tablist">' + tabs.map(function (t) { return '<button role="tab" type="button" data-tab="' + t[0] + '" aria-selected="' + (st.tab === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</nav>';
+    if (!r && st.tab !== 'settings') {
+      v.innerHTML = tabHtml + '<div class="empty"><h2>' + CC_NAME[st.cc] + ' 보고서가 아직 없습니다</h2><p>' +
+        (st.mcp ? '위의 <b>새 보고서 만들기</b>에서 기준일을 고르고 생성하세요. 만든 보고서는 저장되어 팀원도 볼 수 있습니다.' : 'ELLIS 권한이 있는 사람이 이 페이지에서 보고서를 생성하면 여기에 표시됩니다.') + '</p></div>';
+      return;
+    }
+    var body = '';
+    if (st.tab === 'settings') body = renderSettings();
+    else {
+      body = '<div class="meta"><span><b>' + CC_NAME[r.country] + '</b></span><span>기준일 <b>' + esc(r.date) + '</b> (전주 ' + esc(r.prevDate) + ')</span><span>체크아웃 ' + r.year + '년</span><span>통화 <b>' + esc(r.currency) + '</b></span><span>예약 ' + fi(r.diag && r.diag.unique) + '건 기준</span><span>생성 ' + esc((r.generatedAt || '').slice(0, 16).replace('T', ' ')) + ' UTC</span></div>';
+      if (st.tab === 'summary') body += renderSummary(r);
+      if (st.tab === 'movers') body += renderMovers(r);
+      if (st.tab === 'hb') body += renderHB(r);
+      if (st.tab === 'trend') body += renderTrend(r);
+    }
+    v.innerHTML = tabHtml + body;
+    if (st.tab === 'summary') drawSummary(r);
+    if (st.tab === 'hb') drawHB(r);
+    if (st.tab === 'trend') drawTrend(r);
+    if (st.tab === 'settings') bindSettings();
+  }
+
+  /* ---------- 주간 실적 ---------- */
+  function renderSummary(r) {
+    var k = r.kpi, cost = function (x) { return x ? x.sell - x.margin : null; };
+    var tiles = [
+      { t: 'Total RN', f: function (x) { return x && x.rn; }, kind: 'i', unit: 'RN' },
+      { t: 'Selling (Revenue)', f: function (x) { return x && x.sell; }, kind: 'm', unit: r.currency },
+      { t: 'Buying (Cost)', f: cost, kind: 'm', unit: r.currency },
+      { t: 'Margin', f: function (x) { return x && x.margin; }, kind: 'm', unit: r.currency },
+      { t: 'Margin Rate', f: mr, kind: 'pp' },
+    ];
+    var fmt = function (t, v) { return t.kind === 'i' ? fi(v) : t.kind === 'm' ? fm(v) : fp(v, 2); };
+    var html = '<div class="kpis">' + tiles.map(function (t) {
+      var c = t.f(k.cur), p = t.f(k.prev), mc = t.f(k.monthCur), mp = t.f(k.monthPrev), ly = k.ly ? t.f(k.ly) : null;
+      return '<div class="kpi"><div class="lbl">' + t.t + '</div><div class="val">' + fmt(t, c) + (t.unit && t.kind !== 'pp' ? '<small>' + t.unit + '</small>' : '') + '</div><dl>' +
+        '<dt>WoW</dt><dd>' + delta(isN(c) && isN(p) ? c - p : null, t.kind) + (t.kind !== 'pp' ? pct(c, p) : '') + '</dd>' +
+        '<dt>MoM</dt><dd>' + delta(isN(mc) && isN(mp) ? mc - mp : null, t.kind) + (t.kind !== 'pp' ? pct(mc, mp) : '') + '</dd>' +
+        '<dt>YoY</dt><dd>' + delta(isN(c) && isN(ly) ? c - ly : null, t.kind) + (t.kind !== 'pp' ? pct(c, ly) : '') + '</dd></dl></div>';
+    }).join('') + '</div>';
+
+    var cmp = table([
+      { t: 'Metric', v: function (x) { return x.t; } },
+      { t: 'This Week', r: 1, v: function (x) { return fmt(x, x.f(k.cur)); } },
+      { t: 'Previous Week', r: 1, v: function (x) { return fmt(x, x.f(k.prev)); } },
+      { t: 'WoW', r: 1, v: function (x) { var a = x.f(k.cur), b = x.f(k.prev); return delta(isN(a) && isN(b) ? a - b : null, x.kind); } },
+      { t: r.curMonth + ' 체크아웃 (OTB)', r: 1, v: function (x) { return fmt(x, x.f(k.monthCur)); } },
+      { t: r.prevMonth + ' 체크아웃 실적', r: 1, v: function (x) { return fmt(x, x.f(k.monthPrev)); } },
+      { t: 'MoM', r: 1, v: function (x) { var a = x.f(k.monthCur), b = x.f(k.monthPrev); return delta(isN(a) && isN(b) ? a - b : null, x.kind); } },
+      { t: 'Prior Year', r: 1, v: function (x) { return k.ly ? fmt(x, x.f(k.ly)) : '–'; } },
+      { t: 'YoY', r: 1, v: function (x) { var a = x.f(k.cur), b = k.ly ? x.f(k.ly) : null; return delta(isN(a) && isN(b) ? a - b : null, x.kind); } },
+    ], tiles);
+    html += sec('Weekly Total Performance', '<div class="card">' + cmp + '</div>', 'This Week = ' + r.year + '년 체크아웃 예약 중 기준일까지 들어온 확정 예약 누적 · MoM = 당월 체크아웃 OTB vs 전월 체크아웃 실적' + (k.ly ? '' : ' · 전년 동기는 생성 시 선택'));
+
+    var rg = r.regions, tot = rg.reduce(function (a, x) { return a + x.cur.rn; }, 0), max = Math.max.apply(null, [0].concat(rg.map(function (x) { return x.cur.rn; })));
+    var sum = function (f) { return rg.reduce(function (a, x) { return a + (f(x) || 0); }, 0); };
+    var rgTable = table([
+      { t: 'Region/City', v: function (x) { return esc(x.name); } },
+      { t: 'RN', r: 1, cls: 'barcell', v: function (x) { return barCell(x.cur.rn, max, fi(x.cur.rn)); } },
+      { t: '비중', r: 1, v: function (x) { return fp(tot ? x.cur.rn / tot : null); } },
+      { t: 'Revenue', r: 1, v: function (x) { return fm(x.cur.sell); } },
+      { t: 'Margin', r: 1, v: function (x) { return fm(x.cur.margin); } },
+      { t: 'Margin Rate', r: 1, v: function (x) { return fp(mr(x.cur), 2); } },
+      { t: 'WoW ΔRN', r: 1, v: function (x) { return delta(x.cur.rn - x.prev.rn, 'i'); } },
+      { t: 'WoW ΔMargin', r: 1, v: function (x) { return delta(x.cur.margin - x.prev.margin, 'm'); } },
+      { t: r.prevMonth + ' 실적 RN', r: 1, v: function (x) { return fi(x.mPrev); } },
+      { t: r.curMonth + ' OTB RN', r: 1, v: function (x) { return fi(x.mCur); } },
+    ], rg, ['Total', fi(tot), '100%', fm(sum(function (x) { return x.cur.sell; })), fm(sum(function (x) { return x.cur.margin; })),
+      fp(mr({ sell: sum(function (x) { return x.cur.sell; }), margin: sum(function (x) { return x.cur.margin; }) }), 2),
+      delta(sum(function (x) { return x.cur.rn - x.prev.rn; }), 'i'), delta(sum(function (x) { return x.cur.margin - x.prev.margin; }), 'm'), fi(sum(function (x) { return x.mPrev; })), fi(sum(function (x) { return x.mCur; }))]);
+    var hgt = Math.max(200, rg.length * 28 + 40);
+    html += sec('Performance by Region', '<div class="grid2"><div class="card"><h3>지역별 RN</h3><div class="chart" style="height:' + hgt + 'px"><canvas id="c-rg"></canvas></div></div><div class="card"><h3>지역별 WoW ΔRN (이번 주 신규 픽업)</h3><div class="chart" style="height:' + hgt + 'px"><canvas id="c-rgw"></canvas></div></div></div><div class="card" style="margin-top:14px">' + rgTable + '</div>', '지역 목록은 설정 탭에서 바꿀 수 있습니다');
+
+    var hs = r.topHotels, hmax = Math.max.apply(null, [0].concat(hs.map(function (x) { return x.cur.rn; })));
+    html += sec('Top 10 Hotels (by RN)', '<div class="card">' + table([
+      { t: '#', r: 1, v: function (x, i) { return i + 1; } },
+      { t: 'Hotel', v: function (x) { return esc(x.name) + ' <span class="muted small">' + esc(x.code) + '</span>'; } },
+      { t: 'Region', v: function (x) { return esc(x.region); } },
+      { t: 'RN', r: 1, cls: 'barcell', v: function (x) { return barCell(x.cur.rn, hmax, fi(x.cur.rn)); } },
+      { t: 'Revenue', r: 1, v: function (x) { return fm(x.cur.sell); } },
+      { t: 'Margin', r: 1, v: function (x) { return fm(x.cur.margin); } },
+      { t: 'Margin Rate', r: 1, v: function (x) { return fp(mr(x.cur), 2); } },
+      { t: 'WoW ΔRN', r: 1, v: function (x) { return delta(x.cur.rn - x.prev.rn, 'i'); } },
+      { t: 'Contract', v: function (x) { return ctTag(x.ct); } },
+    ], hs) + '</div>', 'Contract = 해당 호텔 RN이 가장 많은 계약 유형');
+
+    var e = r.exclusive;
+    var stat = function (lbl, val, d) { return '<div class="kpi"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div><dl><dt>WoW</dt><dd>' + d + '</dd></dl></div>'; };
+    var sh = function (x, key) { return k[x][key] ? e[x][key] / k[x][key] : null; };
+    html += sec('Exclusive / Hard Block Contribution', e.count ? '<div class="kpis">' +
+      stat('지정 호텔 수', fi(e.count), '<span class="flat">설정 기준</span>') +
+      stat('RN 비중', fp(sh('cur', 'rn'), 2), delta(sh('cur', 'rn') - sh('prev', 'rn'), 'pp')) +
+      stat('마진 기여도', fp(sh('cur', 'margin'), 2), delta(sh('cur', 'margin') - sh('prev', 'margin'), 'pp')) +
+      stat('평균 마진율', fp(mr(e.cur), 2), delta(mr(e.cur) - mr(e.prev), 'pp')) +
+      stat('지정 호텔 총 RN', fi(e.cur.rn), delta(e.cur.rn - e.prev.rn, 'i')) + '</div>'
+      : '<div class="note warn">독점·HB 호텔 목록이 비어 있습니다. 설정 탭에서 호텔 코드를 등록하면 다음 생성부터 집계됩니다.</div>', '설정 탭에 등록한 호텔 기준');
+    return html;
+  }
+  function drawSummary(r) {
+    var rg = r.regions.slice();
+    var s1 = rg.slice().sort(function (a, b) { return b.cur.rn - a.cur.rn; });
+    chart($('#c-rg'), { type: 'bar', data: { labels: s1.map(function (x) { return x.name; }), datasets: [Object.assign({ data: s1.map(function (x) { return x.cur.rn; }), backgroundColor: css('--series') }, barOpt)] },
+      options: { indexAxis: 'y', scales: { x: { ticks: { callback: function (v) { return nf0.format(v); } } }, y: { grid: { display: false } } }, plugins: { tooltip: { callbacks: { label: function (c) { return ' RN ' + fi(c.raw); } } } } } });
+    var s2 = rg.slice().sort(function (a, b) { return (b.cur.rn - b.prev.rn) - (a.cur.rn - a.prev.rn); });
+    chart($('#c-rgw'), { type: 'bar', data: { labels: s2.map(function (x) { return x.name; }), datasets: [Object.assign({ data: s2.map(function (x) { return x.cur.rn - x.prev.rn; }), backgroundColor: s2.map(function (x) { return x.cur.rn - x.prev.rn >= 0 ? css('--series') : css('--down'); }) }, barOpt, { borderSkipped: false })] },
+      options: { indexAxis: 'y', scales: { x: { ticks: { callback: function (v) { return nf0.format(v); } } }, y: { grid: { display: false } } }, plugins: { tooltip: { callbacks: { label: function (c) { return ' WoW ΔRN ' + sg(c.raw) + fi(Math.abs(c.raw)); } } } } } });
+  }
+
+  /* ---------- 신규·급감속 ---------- */
+  function renderMovers(r) {
+    var pick = function (x) { return x.cur.rn - x.prev.rn; }, pick2 = function (x) { return x.prev.rn - x.prev2.rn; };
+    var hcols = [
+      { t: '#', r: 1, v: function (x, i) { return i + 1; } },
+      { t: 'Hotel', v: function (x) { return esc(x.name) + ' <span class="muted small">' + esc(x.code) + '</span>'; } },
+      { t: 'Region', v: function (x) { return esc(x.region); } },
+      { t: 'RN', r: 1, v: function (x) { return fi(x.cur.rn); } },
+      { t: 'Revenue', r: 1, v: function (x) { return fm(x.cur.sell); } },
+      { t: 'Margin', r: 1, v: function (x) { return fm(x.cur.margin); } },
+      { t: 'Margin Rate', r: 1, v: function (x) { return fp(mr(x.cur), 2); } },
+      { t: '이번 주 픽업', r: 1, v: function (x) { return delta(pick(x), 'i'); } },
+      { t: '지난주 픽업', r: 1, v: function (x) { return delta(pick2(x), 'i'); } },
+      { t: 'Contract', v: function (x) { return ctTag(x.ct); } },
+    ];
+    var newCols = hcols.filter(function (c) { return c.t !== '지난주 픽업'; });
+    var rcols = [
+      { t: '#', r: 1, v: function (x, i) { return i + 1; } },
+      { t: 'Region', v: function (x) { return esc(x.name); } },
+      { t: 'RN', r: 1, v: function (x) { return fi(x.cur.rn); } },
+      { t: 'Revenue', r: 1, v: function (x) { return fm(x.cur.sell); } },
+      { t: 'Margin', r: 1, v: function (x) { return fm(x.cur.margin); } },
+      { t: 'Margin Rate', r: 1, v: function (x) { return fp(mr(x.cur), 2); } },
+      { t: '이번 주 픽업', r: 1, v: function (x) { return delta(pick(x), 'i'); } },
+      { t: '지난주 픽업', r: 1, v: function (x) { return delta(pick2(x), 'i'); } },
+      { t: '증감', r: 1, v: function (x) { return delta(pick(x) - pick2(x), 'i'); } },
+    ];
+    return sec('신규 예약 호텔', '<div class="card">' + table(newCols, r.newHotels) + '</div>', '전주 기준일엔 예약이 없다가 이번 주 처음 예약이 들어온 호텔 (RN 순, 최대 10)') +
+      sec('전주 대비 급감속 호텔', '<div class="card">' + table(hcols, r.dropHotels) + '</div>', '이번 주 픽업이 지난주 픽업보다 가장 크게 줄어든 호텔 (최대 10)') +
+      sec('전주 대비 급감속 지역', '<div class="card">' + table(rcols, r.dropRegions) + '</div>', '픽업 = 해당 주에 순증한 RN (신규 − 취소)');
+  }
+
+  /* ---------- 독점·HB 호텔 ---------- */
+  function renderHB(r) {
+    var e = r.exclusive;
+    if (!e.count) return '<div class="note warn" style="margin-top:14px">독점·HB 호텔 목록이 비어 있습니다. 설정 탭에서 호텔 코드를 등록하면 다음 생성부터 호텔별 월별 실적이 나옵니다.</div>';
+    var max = Math.max.apply(null, [0].concat(e.hotels.map(function (h) { return h.cur.rn; })));
+    var sumTable = table([
+      { t: 'Code', v: function (h) { return esc(h.code); } },
+      { t: 'Hotel', v: function (h) { return esc(h.name || '(이 기간 예약 없음)') + (h.label ? ' <span class="tag">' + esc(h.label) + '</span>' : ''); } },
+      { t: 'Region', v: function (h) { return esc(h.region); } },
+      { t: 'RN', r: 1, cls: 'barcell', v: function (h) { return barCell(h.cur.rn, max, fi(h.cur.rn)); } },
+      { t: 'Selling', r: 1, v: function (h) { return fm(h.cur.sell); } },
+      { t: 'Buying', r: 1, v: function (h) { return fm(h.cur.sell - h.cur.margin); } },
+      { t: 'Margin', r: 1, v: function (h) { return fm(h.cur.margin); } },
+      { t: 'Margin Rate', r: 1, v: function (h) { return fp(mr(h.cur), 2); } },
+      { t: 'WoW ΔRN', r: 1, v: function (h) { return delta(h.cur.rn - h.prev.rn, 'i'); } },
+      { t: 'Contract', v: function (h) { return ctTag(h.ct); } },
+    ], e.hotels.slice().sort(function (a, b) { return b.cur.rn - a.cur.rn; }));
+    var opts = [{ code: '__all', name: '지정 호텔 합계' }].concat(e.hotels);
+    if (!opts.some(function (o) { return o.code === st.hbPick; })) st.hbPick = '__all';
+    var m = monthsOf(e, st.hbPick);
+    var rowsDef = [['Selling', function (x) { return fm(x.sell); }, function (a) { return fm(a.sell); }], ['Buying', function (x) { return fm(x.sell - x.margin); }, function (a) { return fm(a.sell - a.margin); }],
+      ['Margin', function (x) { return fm(x.margin); }, function (a) { return fm(a.margin); }], ['Room Nights', function (x) { return fi(x.rn); }, function (a) { return fi(a.rn); }], ['Margin Rate', function (x) { return fp(mr(x)); }, function (a) { return fp(mr(a)); }]];
+    var all = m.reduce(function (a, x) { return { rn: a.rn + x.rn, sell: a.sell + x.sell, margin: a.margin + x.margin }; }, { rn: 0, sell: 0, margin: 0 });
+    var mt = '<div class="tw"><table><thead><tr><th>Values</th>' + MONTHS.map(function (x) { return '<th class="r">' + x + '</th>'; }).join('') + '<th class="r">합계</th></tr></thead><tbody>' +
+      rowsDef.map(function (d) { return '<tr><td>' + d[0] + '</td>' + m.map(function (x) { return '<td class="r">' + d[1](x) + '</td>'; }).join('') + '<td class="r"><b>' + d[2](all) + '</b></td></tr>'; }).join('') + '</tbody></table></div>';
+    return sec('독점·HB 호텔 요약', '<div class="card">' + sumTable + '</div>', r.year + '년 체크아웃 · 기준일 누적') +
+      sec('월별 현황', '<div class="pick" role="group" aria-label="호텔 선택">' + opts.map(function (o) { return '<button type="button" data-hb="' + esc(o.code) + '" aria-pressed="' + (o.code === st.hbPick) + '">' + esc(o.name || o.code) + '</button>'; }).join('') + '</div>' +
+        '<div class="grid2"><div class="card"><h3>월별 Room Nights</h3><div class="chart short"><canvas id="c-hb-rn"></canvas></div></div><div class="card"><h3>월별 Margin</h3><div class="chart short"><canvas id="c-hb-m"></canvas></div></div></div>' +
+        '<div class="card" style="margin-top:14px">' + mt + '</div>', '체크아웃 월 기준 · 기준일 이후 달은 이미 받은 예약(OTB)이라 연하게 표시');
+  }
+  function monthsOf(e, code) {
+    if (code !== '__all') { var h = e.hotels.filter(function (x) { return x.code === code; })[0]; return h ? h.months : []; }
+    return MONTHS.map(function (_, i) { return e.hotels.reduce(function (a, h) { var x = h.months[i] || {}; return { rn: a.rn + (x.rn || 0), sell: a.sell + (x.sell || 0), margin: a.margin + (x.margin || 0) }; }, { rn: 0, sell: 0, margin: 0 }); });
+  }
+  function drawHB(r) {
+    $$('[data-hb]').forEach(function (b) { b.addEventListener('click', function () { st.hbPick = b.dataset.hb; render(); }); });
+    if (!r.exclusive.count) return;
+    var m = monthsOf(r.exclusive, st.hbPick), cm = +r.date.slice(5, 7) - 1;
+    var col = MONTHS.map(function (_, i) { return i > cm ? css('--series-soft') : css('--series'); });
+    chart($('#c-hb-rn'), { type: 'bar', data: { labels: MONTHS, datasets: [Object.assign({ data: m.map(function (x) { return x.rn; }), backgroundColor: col }, barOpt)] }, options: { scales: { x: { grid: { display: false } } }, plugins: { tooltip: { callbacks: { label: function (c) { return ' RN ' + fi(c.raw); } } } } } });
+    chart($('#c-hb-m'), { type: 'bar', data: { labels: MONTHS, datasets: [Object.assign({ data: m.map(function (x) { return x.margin; }), backgroundColor: col }, barOpt)] }, options: { scales: { x: { grid: { display: false } }, y: { ticks: { callback: function (v) { return nfC.format(v); } } } }, plugins: { tooltip: { callbacks: { label: function (c) { return ' Margin ' + fm(c.raw) + ' · 마진율 ' + fp(mr(m[c.dataIndex])); } } } } } });
+  }
+
+  /* ---------- 주차 추이 ---------- */
+  function renderTrend(r) {
+    var list = listFor(r.country).map(function (x) { return x.r; }).reverse();
+    var note = list.length < 2 ? '<div class="note" style="margin-top:14px">저장된 보고서가 1개라 전주 값과 함께 2개 점으로 보여줍니다. 매주 생성하면 추이가 쌓입니다.</div>' : '';
+    return note + sec(CC_NAME[r.country] + ' 주차별 추이', '<div class="grid3"><div class="card"><h3>Total RN</h3><div class="chart short"><canvas id="c-t-rn"></canvas></div></div><div class="card"><h3>Margin (' + esc(r.currency) + ')</h3><div class="chart short"><canvas id="c-t-m"></canvas></div></div><div class="card"><h3>Margin Rate</h3><div class="chart short"><canvas id="c-t-r"></canvas></div></div></div>' +
+      '<div class="card" style="margin-top:14px">' + table([
+        { t: '기준일', v: function (x) { return esc(x.date); } },
+        { t: 'RN', r: 1, v: function (x) { return fi(x.kpi.cur.rn); } },
+        { t: 'WoW ΔRN', r: 1, v: function (x) { return delta(x.kpi.cur.rn - x.kpi.prev.rn, 'i'); } },
+        { t: 'Revenue', r: 1, v: function (x) { return fm(x.kpi.cur.sell); } },
+        { t: 'Margin', r: 1, v: function (x) { return fm(x.kpi.cur.margin); } },
+        { t: 'Margin Rate', r: 1, v: function (x) { return fp(mr(x.kpi.cur), 2); } },
+        { t: '예약 건수', r: 1, v: function (x) { return fi(x.diag && x.diag.unique); } },
+      ], list.slice().reverse()) + '</div>');
+  }
+  function drawTrend(r) {
+    var list = listFor(r.country).map(function (x) { return x.r; }).reverse();
+    var pts = list.map(function (x) { return { l: x.date.slice(5), rn: x.kpi.cur.rn, m: x.kpi.cur.margin, r: mr(x.kpi.cur) }; });
+    if (list.length === 1) pts.unshift({ l: r.prevDate.slice(5) + ' (전주)', rn: r.kpi.prev.rn, m: r.kpi.prev.margin, r: mr(r.kpi.prev) });
+    function line(id, key, tick, fmt) {
+      chart($(id), { type: 'line', data: { labels: pts.map(function (p) { return p.l; }), datasets: [{ data: pts.map(function (p) { return p[key]; }), borderColor: css('--series'), backgroundColor: css('--series'), borderWidth: 2, pointRadius: 4, pointHoverRadius: 6 }] },
+        options: { interaction: { mode: 'index', intersect: false }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: tick } } }, plugins: { tooltip: { callbacks: { label: function (c) { return ' ' + fmt(c.raw); } } } } } });
+    }
+    line('#c-t-rn', 'rn', function (v) { return nf0.format(v); }, fi);
+    line('#c-t-m', 'm', function (v) { return nfC.format(v); }, fm);
+    line('#c-t-r', 'r', function (v) { return (v * 100).toFixed(2) + '%'; }, function (v) { return fp(v, 2); });
+  }
+
+  /* ---------- 설정 ---------- */
+  function renderSettings() {
+    var c = cfgOf(st.cc);
+    var hotels = (c.hotels || []).map(function (h) { return h.code + (h.label ? ', ' + h.label : ''); }).join('\n');
+    var aliases = Object.keys(c.aliases || {}).map(function (k) { return k + ' = ' + c.aliases[k]; }).join('\n');
+    return '<section class="sec"><div class="sec-h"><h2>' + CC_NAME[st.cc] + ' 설정</h2><span>바꾼 설정은 다음 생성부터 반영됩니다</span></div><div class="card"><div class="settings">' +
+      '<div><label for="s-hotels">독점·HB 호텔 (한 줄에 하나: ELLIS 호텔코드, 표시 라벨)</label><textarea id="s-hotels" spellcheck="false" placeholder="886622&#10;606114, Floating">' + esc(hotels) + '</textarea><p>호텔 코드는 ELLIS 호텔 코드(숫자)입니다. 라벨은 선택입니다.</p></div>' +
+      '<div><label for="s-regions">보고 지역 (한 줄에 하나)</label><textarea id="s-regions" spellcheck="false" placeholder="Ho Chi Minh&#10;Hanoi">' + esc((c.regions || []).join('\n')) + '</textarea><p>목록에 없는 도시는 ETC로 묶습니다. 비워 두면 RN 상위 8개 도시를 자동으로 씁니다.</p></div>' +
+      '<div><label for="s-aliases">도시명 별칭 (ELLIS 도시 = 보고 지역)</label><textarea id="s-aliases" spellcheck="false" placeholder="Mui Ne = Phan Thiet">' + esc(aliases) + '</textarea><p>"Ho Chi Minh City"처럼 이름만 조금 다른 경우는 자동으로 맞춥니다. 다른 도시를 한 지역으로 묶을 때만 적으세요.</p></div>' +
+      '</div><div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap"><button class="btn primary" type="button" id="btn-save-set">설정 저장</button><span class="status" id="set-status" role="status"></span></div></div></section>';
+  }
+  function bindSettings() {
+    var b = $('#btn-save-set');
+    if (!b) return;
+    if (!st.db) { b.disabled = true; $('#set-status').textContent = '이 화면에서는 설정을 저장할 수 없습니다.'; return; }
+    b.addEventListener('click', function () {
+      var hotels = $('#s-hotels').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
+        var p = l.split(/[,\t]/); return { code: p[0].trim(), label: (p.slice(1).join(',') || '').trim() };
+      }).filter(function (h) { return /^\d+$/.test(h.code); });
+      var regions = $('#s-regions').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+      var aliases = {};
+      $('#s-aliases').value.split('\n').forEach(function (l) { var p = l.split('='); if (p.length === 2 && p[0].trim() && p[1].trim()) aliases[p[0].trim()] = p[1].trim(); });
+      var next = JSON.parse(JSON.stringify(st.settings || defaults()));
+      next[st.cc] = { regions: regions, aliases: aliases, hotels: hotels };
+      b.disabled = true;
+      st.db.doc('config/settings').set(next).then(function () {
+        st.settings = next; $('#set-status').textContent = '저장했습니다. 호텔 ' + hotels.length + '곳, 지역 ' + regions.length + '개.';
+      }, function (e) {
+        $('#set-status').textContent = '저장하지 못했습니다 (' + e.code + '). 이 페이지의 편집 권한이 있는지 확인하세요.';
+      }).then(function () { b.disabled = false; });
+    });
+  }
+
+  /* ---------- 이벤트 ---------- */
+  $$('.seg button').forEach(function (b) { b.addEventListener('click', function () { st.cc = b.dataset.cc; st.current = null; st.hbPick = null; render(); }); });
+  $('#sel-report').addEventListener('change', function (e) { st.current = e.target.value || null; render(); });
+  $('#btn-toggle-gen').addEventListener('click', function () { var g = $('#gen'); g.hidden = !g.hidden; });
+  $('#btn-run').addEventListener('click', generate);
+  $('#btn-cancel').addEventListener('click', function () { if (st.abort) st.abort.abort(); });
+  $('#view').addEventListener('click', function (e) {
+    var t = e.target.closest('button[data-tab]');
+    if (!t) return;
+    st.tab = t.dataset.tab; render();
+  });
+  try { var mq = window.matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('change', render); } catch (x) {}
+  new MutationObserver(function () { render(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  $('#in-date').value = SCM.addDays(todaySeoul(), -1);
+  render();
+
+  if (window.claude && window.claude.use) {
+    window.claude.use('db').then(function (db) { st.db = db; if (db) listenDb(); });
+    window.claude.use('mcp').then(function (m) {
+      st.mcp = m;
+      if (!m) {
+        $('#btn-run').disabled = true;
+        setStatus('이 화면에서는 ELLIS를 조회할 수 없습니다. 저장된 보고서만 볼 수 있습니다.', true);
+      }
+      render();
+    });
+  } else {
+    $('#btn-run').disabled = true;
+    setStatus('claude.ai에서 열어야 ELLIS 조회와 저장이 동작합니다.', true);
+  }
+})();
+</script>
