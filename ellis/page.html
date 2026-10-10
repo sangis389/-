@@ -168,7 +168,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
       <button class="btn" type="button" id="btn-cancel" hidden>중지</button>
     </div>
     <div class="progress" aria-hidden="true"><div id="prog"></div></div>
-    <div class="status" id="gen-status" role="status" aria-live="polite">국가와 기준일을 고르고 생성을 누르세요. ELLIS 부하를 줄이려고 한 번에 1건씩 조회해서 베트남은 5분 안팎 걸립니다.</div>
+    <div class="status" id="gen-status" role="status" aria-live="polite">국가와 기준일을 고르고 생성을 누르세요. ELLIS가 큰 조회에서 시간 초과가 잦아 작게 나눠 받습니다. 태국은 수 분, 베트남은 매우 오래 걸릴 수 있습니다.</div>
   </section>
 
   <div id="view"></div>
@@ -181,7 +181,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
   'use strict';
   var SERVER = 'ELLIS_MCP';
   var TOOL = 'get_hotel_bookings';
-  var PAGE = 500; // 한 번에 받는 예약 수. ELLIS는 동시 조회를 제한하므로 차례로 1건씩 요청
+  var PAGE = 100, MIN_PAGE = 50; // 한 번에 받는 예약 수. ELLIS는 큰 페이지에서 시간 초과가 잦고 동시 조회도 제한하므로 작게, 차례로 요청
   var CC_NAME = { VN: '베트남', TH: '태국' };
   var MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 
@@ -308,7 +308,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
         onProgress(doneDays / totalDays, got, reused, calls);
         continue;
       }
-      var wrows = [], offset = 0, totalCount = null, attempt = 0, limit = PAGE, split = false;
+      var wrows = [], offset = 0, totalCount = null, attempt = 0, limit = st.goodLimit || PAGE, split = false;
       while (totalCount === null || offset < totalCount) {
         if (signal && signal.aborted) throw { code: 'cancelled' };
         st.lastWin = w.from + '~' + w.to + ' (' + offset + '번째부터 ' + limit + '건)';
@@ -319,11 +319,18 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
           totalCount = typeof p.totalCount === 'number' ? p.totalCount : (p.list.length < limit ? offset + p.list.length : Infinity);
           offset += p.list.length;
           if (!p.list.length) break;
-          attempt = 0;
+          attempt = 0; st.goodLimit = limit;
           onProgress((doneDays + spanDays(w) * Math.min(1, offset / (totalCount || 1))) / totalDays, got + wrows.length, reused, calls);
           await sleep(400, signal);
         } catch (e) {
           if (!isBusy(e)) throw e;
+          if (isTimeout(e) && limit > MIN_PAGE) {
+            // 먼저 한 번에 받는 건수를 줄인다
+            limit = Math.max(MIN_PAGE, Math.floor(limit / 2));
+            if (st.onWait) st.onWait(3, attempt + 1, true, limit, w);
+            await sleep(3000 + Math.random() * 1000, signal);
+            continue;
+          }
           if (isTimeout(e) && spanDays(w) > 1) {
             // 이 구간을 반으로 나눠 앞에 다시 넣는다 (받은 일부는 버리고 새로 받음)
             var halves = splitWin(w);
@@ -334,7 +341,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
             break;
           }
           if (attempt >= WAITS.length) throw e;
-          if (isTimeout(e) && limit > 100) limit = Math.max(100, Math.floor(limit / 2));
+
           var wait = Math.max(WAITS[attempt], e.retryAfterMs || 0) + Math.random() * 1500;
           attempt++;
           if (st.onWait) st.onWait(Math.round(wait / 1000), attempt, isTimeout(e), limit, w);
