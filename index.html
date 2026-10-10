@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCM Weekly Dashboard</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">▌</span>
+    <div>
+      <h1>SCM Weekly Dashboard</h1>
+      <p class="sub" id="meta-line">주간 보고 엑셀을 올리면 대시보드가 만들어집니다</p>
+    </div>
+  </div>
+  <div class="controls">
+    <label class="ctl">국가
+      <select id="sel-country"></select>
+    </label>
+    <label class="ctl">주차
+      <select id="sel-week"></select>
+    </label>
+    <label class="ctl" title="엑셀 원본은 총실적 마진율을 원가 대비, 지역·호텔은 매출 대비로 계산합니다. 대시보드는 한 기준으로 통일해 보여줍니다.">마진율 기준
+      <select id="sel-basis">
+        <option value="rev">매출 대비 (Margin ÷ Selling)</option>
+        <option value="cost">원가 대비 (Margin ÷ Buying)</option>
+      </select>
+    </label>
+    <button class="btn primary" id="btn-upload" type="button">엑셀 업로드</button>
+    <input type="file" id="file-input" accept=".xlsx,.xlsm,.xls,.json" multiple hidden>
+    <details class="menu">
+      <summary class="btn">더보기</summary>
+      <div class="menu-pop">
+        <button type="button" id="btn-export">데이터 내보내기 (JSON)</button>
+        <button type="button" id="btn-print">인쇄 / PDF 저장</button>
+        <button type="button" id="btn-delete">현재 주차 삭제</button>
+        <button type="button" id="btn-reset">전체 데이터 초기화</button>
+      </div>
+    </details>
+  </div>
+</header>
+
+<div id="drop-hint" class="drop-hint" hidden><div>여기에 엑셀 파일을 놓으세요</div></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<main id="app">
+  <section id="empty" class="empty" hidden>
+    <div class="empty-card">
+      <h2>주간 보고 파일을 올려 주세요</h2>
+      <p><b>OMH_SCM_Weekly_Report</b> 양식(시트 ①~④) 그대로 올리면 됩니다.<br>
+      여러 국가·여러 주차 파일을 한 번에 올릴 수 있고, 올린 데이터는 이 브라우저에 저장되어 주차별 추이가 쌓입니다.</p>
+      <button class="btn primary big" type="button" id="btn-upload-2">엑셀 파일 선택</button>
+      <p class="muted small">또는 파일을 이 창에 끌어다 놓으세요. 파일은 서버로 전송되지 않고 브라우저 안에서만 읽습니다.</p>
+    </div>
+  </section>
+
+  <nav id="tabs" class="tabs" role="tablist" hidden>
+    <button role="tab" data-tab="summary" aria-selected="true">① 주간 실적</button>
+    <button role="tab" data-tab="movers">② 신규·급감속</button>
+    <button role="tab" data-tab="hb">③ HB·Floating</button>
+    <button role="tab" data-tab="market">④ 시장·경쟁사</button>
+    <button role="tab" data-tab="trend">주차 추이</button>
+    <button role="tab" data-tab="checks">데이터 점검 <span id="check-badge" class="badge" hidden></span></button>
+  </nav>
+
+  <section class="panel" data-panel="summary"></section>
+  <section class="panel" data-panel="movers" hidden></section>
+  <section class="panel" data-panel="hb" hidden></section>
+  <section class="panel" data-panel="market" hidden></section>
+  <section class="panel" data-panel="trend" hidden></section>
+  <section class="panel" data-panel="checks" hidden></section>
+</main>
+
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
