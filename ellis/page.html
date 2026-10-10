@@ -181,7 +181,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
   'use strict';
   var SERVER = 'ELLIS_MCP';
   var TOOL = 'get_hotel_bookings';
-  var PAGE = 1000, PARALLEL = 1; // ELLIS는 동시 조회를 제한하므로 한 번에 1건씩
+  var PAGE = 500; // 한 번에 받는 예약 수. ELLIS는 동시 조회를 제한하므로 차례로 1건씩 요청
   var CC_NAME = { VN: '베트남', TH: '태국' };
   var MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 
@@ -254,12 +254,15 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     return 'ELLIS 조회 중 오류가 났습니다 (' + (c || 'unknown') + '): ' + (e && e.message ? e.message : '');
   }
 
-  // ELLIS가 동시 조회 한도에 걸렸다고 답하면(bulkhead_full) 기다렸다가 다시 시도
-  var WAITS = [3000, 6000, 12000, 20000, 30000, 45000];
-  function busy(e) {
+  // ELLIS가 바쁘거나(bulkhead_full) 시간 초과로 실패하면 기다렸다가 다시 시도한다.
+  // 시간 초과일 때는 한 번에 받는 건수를 절반으로 줄여(최소 100건) 다시 요청한다.
+  var WAITS = [3000, 6000, 12000, 20000, 30000, 45000, 60000, 60000];
+  function msgOf(e) { return String((e && e.message) || ''); }
+  function isTimeout(e) { return /timeout|timed out/i.test(msgOf(e)); }
+  function isBusy(e) {
     if (!e || e.code === 'cancelled') return false;
-    if (e.retryable) return true;
-    return /bulkhead|UPSTREAM_UNAVAILABLE|Too many concurrent|rate.?limit|429|503/i.test(String(e.message || ''));
+    if (e.retryable || e.code === 'server_unavailable' || e.code === 'upstream_error') return true;
+    return isTimeout(e) || /bulkhead|UPSTREAM_UNAVAILABLE|UPSTREAM_ERROR|Too many concurrent|rate.?limit|429|50[234]/i.test(msgOf(e));
   }
   function once(args, signal) {
     return st.mcp.callTool(SERVER, TOOL, args, { cache: false, signal: signal }).then(function (res) {
@@ -270,61 +273,59 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
       return p;
     });
   }
-  function call(args, signal, attempt) {
-    attempt = attempt || 0;
-    return once(args, signal).catch(function (e) {
-      if (busy(e) && attempt < WAITS.length) {
-        var wait = Math.max(WAITS[attempt], e.retryAfterMs || 0) + Math.random() * 1500;
-        if (st.onWait) st.onWait(Math.round(wait / 1000), attempt + 1);
-        return new Promise(function (ok) { setTimeout(ok, wait); }).then(function () {
-          if (signal && signal.aborted) throw { code: 'cancelled' };
-          return call(args, signal, attempt + 1);
-        });
-      }
-      throw e;
+  function sleep(ms, signal) {
+    return new Promise(function (ok, no) {
+      var t = setTimeout(ok, ms);
+      if (signal) signal.addEventListener('abort', function () { clearTimeout(t); no({ code: 'cancelled' }); }, { once: true });
     });
   }
 
-  // 작업 큐를 PARALLEL 개씩 처리. 첫 페이지에서 totalCount를 보고 나머지 페이지를 큐에 추가
-  function fetchAll(cc, plan, signal, onProgress) {
-    var rows = { main: [], ly: [] }, queue = [], done = 0, total = plan.length, got = 0;
-    plan.forEach(function (w) { queue.push({ w: w, offset: 0, limit: PAGE, first: true }); });
-    return new Promise(function (resolve, reject) {
-      var active = 0, failed = false;
-      function next() {
-        if (failed) return;
-        if (!queue.length && !active) return resolve(rows);
-        while (active < PARALLEL && queue.length) run(queue.shift());
+  // 받은 구간을 세션 동안 기억해 두어, 중간에 실패해도 다시 누르면 이어서 받는다
+  var winCache = {};
+  var CACHE_MS = 3 * 60 * 60 * 1000;
+
+  async function fetchAll(cc, plan, signal, onProgress) {
+    var rows = { main: [], ly: [] }, got = 0, done = 0, reused = 0;
+    var limit = PAGE;
+    for (var wi = 0; wi < plan.length; wi++) {
+      var w = plan[wi], key = cc + '|' + w.from + '|' + w.to;
+      var bucket = w.ly ? rows.ly : rows.main;
+      var c = winCache[key];
+      if (c && Date.now() - c.at < CACHE_MS) {
+        for (var i = 0; i < c.rows.length; i++) bucket.push(c.rows[i]);
+        got += c.rows.length; done++; reused++;
+        onProgress(done, plan.length, got, reused);
+        continue;
       }
-      function run(job) {
-        active++;
-        call({ dateBasis: 'CHECK_OUT_DATE', fromDate: job.w.from, toDate: job.w.to, countryCode: cc, limit: job.limit, offset: job.offset }, signal)
-          .then(function (p) {
-            var bucket = job.w.ly ? rows.ly : rows.main;
-            for (var i = 0; i < p.list.length; i++) bucket.push(SCM.slimRow(p.list[i]));
-            got += p.list.length;
-            if (job.first && p.totalCount > PAGE) {
-              for (var o = PAGE; o < p.totalCount; o += PAGE) { queue.push({ w: job.w, offset: o, limit: PAGE }); total++; }
-            }
-            done++; active--;
-            onProgress(done, total, got);
-            setTimeout(next, 300); // 연속 호출 사이에 잠깐 쉬어 ELLIS 부하를 줄인다
-          })
-          .catch(function (e) {
-            active--;
-            // 응답이 너무 커서 실패한 것일 수 있으면 같은 구간을 절반 크기로 나눠 다시 받는다
-            if (!busy(e) && e && e.code !== 'cancelled' && job.limit > 250) {
-              var h = job.limit / 2;
-              queue.unshift({ w: job.w, offset: job.offset, limit: h, first: job.first, firstSpan: true }, { w: job.w, offset: job.offset + h, limit: h });
-              total++;
-              setTimeout(next, 300);
-              return;
-            }
-            failed = true; reject(e);
-          });
+      var wrows = [], offset = 0, totalCount = null, attempt = 0;
+      while (totalCount === null || offset < totalCount) {
+        if (signal && signal.aborted) throw { code: 'cancelled' };
+        try {
+          var p = await once({ dateBasis: 'CHECK_OUT_DATE', fromDate: w.from, toDate: w.to, countryCode: cc, limit: limit, offset: offset }, signal);
+          for (var j = 0; j < p.list.length; j++) wrows.push(SCM.slimRow(p.list[j]));
+          totalCount = typeof p.totalCount === 'number' ? p.totalCount : (p.list.length < limit ? offset + p.list.length : Infinity);
+          offset += p.list.length;
+          if (!p.list.length) break;
+          attempt = 0;
+          onProgress(done + Math.min(1, offset / (totalCount || 1)), plan.length, got + wrows.length, reused);
+          await sleep(300, signal);
+          // 성공이 이어지면 건수를 조금씩 원래대로 되돌린다
+          if (limit < PAGE) limit = Math.min(PAGE, limit * 2);
+        } catch (e) {
+          if (!isBusy(e) || attempt >= WAITS.length) throw e;
+          if (isTimeout(e) && limit > 100) limit = Math.max(100, Math.floor(limit / 2));
+          var wait = Math.max(WAITS[attempt], e.retryAfterMs || 0) + Math.random() * 1500;
+          attempt++;
+          if (st.onWait) st.onWait(Math.round(wait / 1000), attempt, isTimeout(e), limit);
+          await sleep(wait, signal);
+        }
       }
-      next();
-    });
+      winCache[key] = { at: Date.now(), rows: wrows };
+      for (var k = 0; k < wrows.length; k++) bucket.push(wrows[k]);
+      got += wrows.length; done++;
+      onProgress(done, plan.length, got, reused);
+    }
+    return rows;
   }
 
   function generate() {
@@ -338,10 +339,12 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     $('#btn-run').disabled = true; $('#btn-cancel').hidden = false;
     setProg(0); setStatus(CC_NAME[cc] + ' · ' + D + ' 기준으로 ELLIS 조회를 시작합니다…');
     var t0 = Date.now();
-    st.onWait = function (sec, n) { setStatus('ELLIS가 다른 조회를 처리 중이라 ' + sec + '초 후 다시 시도합니다 (' + n + '/' + WAITS.length + '회째)…'); };
-    fetchAll(cc, plan, ctrl && ctrl.signal, function (done, total, got) {
+    st.onWait = function (sec, n, timeout, lim) {
+      setStatus((timeout ? 'ELLIS 응답 시간이 초과되어 한 번에 ' + lim + '건씩으로 줄여 ' : 'ELLIS가 다른 조회를 처리 중이라 ') + sec + '초 후 다시 시도합니다 (' + n + '/' + WAITS.length + '회째)…');
+    };
+    fetchAll(cc, plan, ctrl && ctrl.signal, function (done, total, got, reused) {
       setProg(done / total);
-      setStatus('ELLIS 조회 중 · ' + done + '/' + total + '회 · 예약 ' + nf0.format(got) + '건 · ' + Math.round((Date.now() - t0) / 1000) + '초');
+      setStatus('ELLIS 조회 중 · 구간 ' + Math.floor(done) + '/' + total + (reused ? ' (이전에 받은 ' + reused + '개 재사용)' : '') + ' · 예약 ' + nf0.format(got) + '건 · ' + Math.round((Date.now() - t0) / 1000) + '초');
     }).then(function (rows) {
       setStatus('집계 중…');
       var rep = SCM.compute(rows.main, { country: cc, date: D, cfg: cfgOf(cc), lyRows: withLy ? rows.ly : null });
@@ -354,7 +357,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
       }, function (e) {
         setStatus('보고서는 만들었지만 저장하지 못했습니다 (' + e.code + '). ' + (e.code === 'invalid_argument' ? '이 페이지에 쓰기 권한이 없을 수 있습니다.' : ''), true);
       });
-    }).catch(function (e) { setStatus(errText(e), true); })
+    }).catch(function (e) { setStatus(errText(e) + (e && e.code !== 'cancelled' ? ' 받은 구간은 기억해 두었으니, 잠시 후 다시 누르면 이어서 받습니다.' : ''), true); })
       .then(function () { $('#btn-run').disabled = false; $('#btn-cancel').hidden = true; st.abort = null; st.onWait = null; });
   }
 
