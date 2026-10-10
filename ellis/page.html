@@ -122,6 +122,27 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
 .barcell span { position: relative; }
 .tag { display: inline-block; padding: 0 7px; border-radius: 10px; font-size: 11px; line-height: 18px; background: var(--panel-2); color: var(--fg-2); border: 1px solid var(--line); white-space: nowrap; }
 .tag.ex { background: var(--accent-soft); border-color: transparent; color: var(--fg); }
+.news-cat { margin-top: 18px; }
+.news-cat h3 { font-size: 13px; color: var(--fg-2); margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+.news-cat h3 .cnt { font-weight: 400; color: var(--fg-3); font-family: var(--font-num); }
+.news-list { display: grid; gap: 10px; }
+.news-item { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; min-width: 0; }
+.news-item .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.news-item .ttl { font-weight: 600; font-size: 14px; }
+.news-item .sum { color: var(--fg); font-size: 13.5px; }
+.news-item .imp { color: var(--fg-2); font-size: 13px; }
+.news-item .imp b { color: var(--accent); font-weight: 600; margin-right: 4px; }
+.news-item .src { font-size: 12px; color: var(--fg-3); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.news-item .src a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+.news-item .src a:hover { text-decoration: underline; }
+.news-item .del { margin-left: auto; font: inherit; font-size: 12px; background: none; border: 0; color: var(--fg-3); cursor: pointer; padding: 2px 4px; }
+.news-item .del:hover { color: var(--down); }
+.tag.prior { background: var(--warn-bg); border-color: transparent; }
+.news-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.news-form .full { grid-column: 1 / -1; }
+.news-form input[type="text"], .news-form input[type="url"], .news-form input[type="date"] { font: inherit; font-size: 13px; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-height: 34px; width: 100%; }
+.news-form textarea { min-height: 60px; font-family: var(--font-body); }
+@media (max-width: 720px) { .news-form { grid-template-columns: minmax(0, 1fr); } }
 .empty { text-align: center; padding: 48px 20px; color: var(--fg-2); }
 .empty h2 { font-size: 18px; margin-bottom: 6px; color: var(--fg); }
 .pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
@@ -188,7 +209,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
   var $ = function (s, el) { return (el || document).querySelector(s); };
   var $$ = function (s, el) { return Array.prototype.slice.call((el || document).querySelectorAll(s)); };
 
-  var st = { cc: 'VN', reports: {}, current: null, tab: 'summary', settings: null, db: null, mcp: null, canWrite: true, charts: [], hbPick: null, abort: null };
+  var st = { cc: 'VN', news: {}, reports: {}, current: null, tab: 'summary', settings: null, db: null, mcp: null, canWrite: true, charts: [], hbPick: null, abort: null };
 
   /* ---------- 포맷 ---------- */
   var nf0 = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 });
@@ -223,6 +244,12 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     st.db.doc('config/settings').onSnapshot(function (snap) {
       st.settings = snap.exists ? snap.data() : defaults();
       if (st.tab === 'settings') render();
+    }, function () {});
+    st.db.collection('news').onSnapshot(function (snap) {
+      var all = {};
+      snap.docs.forEach(function (d) { var v = d.data(); if (v) all[d.id] = v; });
+      st.news = all;
+      if (st.tab === 'news') render();
     }, function () {});
     st.db.collection('reports').onSnapshot(function (snap) {
       var all = {};
@@ -429,7 +456,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     sel.disabled = !list.length;
     var r = st.current ? st.reports[st.current] : null;
     var v = $('#view');
-    var tabs = [['summary', '주간 실적'], ['movers', '신규·급감속'], ['hb', '독점·HB 호텔'], ['trend', '주차 추이'], ['settings', '설정']];
+    var tabs = [['summary', '주간 실적'], ['movers', '신규·급감속'], ['hb', '독점·HB 호텔'], ['news', '시장·뉴스'], ['trend', '주차 추이'], ['settings', '설정']];
     var tabHtml = '<nav class="tabs" role="tablist">' + tabs.map(function (t) { return '<button role="tab" type="button" data-tab="' + t[0] + '" aria-selected="' + (st.tab === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</nav>';
     if (!r && st.tab !== 'settings') {
       v.innerHTML = tabHtml + '<div class="empty"><h2>' + CC_NAME[st.cc] + ' 보고서가 아직 없습니다</h2><p>' +
@@ -446,12 +473,14 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
       if (st.tab === 'movers') body += renderMovers(r);
       if (st.tab === 'hb') body += renderHB(r);
       if (st.tab === 'trend') body += renderTrend(r);
+      if (st.tab === 'news') body += renderNews(r);
     }
     v.innerHTML = tabHtml + body;
     if (st.tab === 'summary') drawSummary(r);
     if (st.tab === 'hb') drawHB(r);
     if (st.tab === 'trend') drawTrend(r);
     if (st.tab === 'settings') bindSettings();
+    if (st.tab === 'news') bindNews(r);
   }
 
   /* ---------- 주간 실적 ---------- */
@@ -619,6 +648,84 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     var col = MONTHS.map(function (_, i) { return i > cm ? css('--series-soft') : css('--series'); });
     chart($('#c-hb-rn'), { type: 'bar', data: { labels: MONTHS, datasets: [Object.assign({ data: m.map(function (x) { return x.rn; }), backgroundColor: col }, barOpt)] }, options: { scales: { x: { grid: { display: false } } }, plugins: { tooltip: { callbacks: { label: function (c) { return ' RN ' + fi(c.raw); } } } } } });
     chart($('#c-hb-m'), { type: 'bar', data: { labels: MONTHS, datasets: [Object.assign({ data: m.map(function (x) { return x.margin; }), backgroundColor: col }, barOpt)] }, options: { scales: { x: { grid: { display: false } }, y: { ticks: { callback: function (v) { return nfC.format(v); } } } }, plugins: { tooltip: { callbacks: { label: function (c) { return ' Margin ' + fm(c.raw) + ' · 마진율 ' + fp(mr(m[c.dataIndex])); } } } } } });
+  }
+
+  /* ---------- 시장·뉴스 ---------- */
+  var NEWS_CATS = ['항공', '공항·인프라', '정책·통계', '날씨·재해', '행사·이벤트', 'OTA·프로모션', '기타'];
+  // 보고서 기준일과 같은 주의 뉴스, 없으면 그 이전 가장 최근 주의 뉴스
+  function newsFor(r) {
+    var exact = st.news[r.country + '_' + r.date];
+    if (exact) return { id: r.country + '_' + r.date, doc: exact, exact: true };
+    var ids = Object.keys(st.news).filter(function (k) { var d = st.news[k]; return d.country === r.country && d.date <= r.date; })
+      .sort(function (a, b) { return st.news[b].date.localeCompare(st.news[a].date); });
+    return ids.length ? { id: ids[0], doc: st.news[ids[0]], exact: false } : { id: r.country + '_' + r.date, doc: null, exact: true };
+  }
+  function safeUrl(u) { return /^https?:\/\//i.test(u || '') ? u : ''; }
+  function renderNews(r) {
+    var n = newsFor(r), items = (n.doc && n.doc.items) || [];
+    var head = n.doc ? '<span>' + esc(n.doc.weekFrom || '') + ' ~ ' + esc(n.doc.weekTo || n.doc.date) + ' · ' + items.length + '건' + (n.doc.updatedBy ? ' · ' + esc(n.doc.updatedBy) : '') + '</span>' : '';
+    var html = '<section class="sec"><div class="sec-h"><h2>' + CC_NAME[r.country] + ' 시장 현황·뉴스</h2>' + head + '</div>';
+    if (n.doc && !n.exact) html += '<div class="note warn">이 기준일의 뉴스가 아직 없어 ' + esc(n.doc.date) + ' 주차 뉴스를 보여줍니다.</div>';
+    if (!items.length) html += '<div class="empty" style="padding:28px 12px"><h2>이 주차의 뉴스가 아직 없습니다</h2><p>Claude에게 "이번 주 시장 뉴스 정리해줘"라고 요청하거나, 아래에서 직접 추가하세요.</p></div>';
+    NEWS_CATS.forEach(function (cat) {
+      var list = items.map(function (it, i) { return { it: it, i: i }; }).filter(function (x) { return (NEWS_CATS.indexOf(x.it.cat) >= 0 ? x.it.cat : '기타') === cat; });
+      if (!list.length) return;
+      html += '<div class="news-cat"><h3>' + esc(cat) + ' <span class="cnt">' + list.length + '</span></h3><div class="news-list">' + list.map(function (x) {
+        var it = x.it, url = safeUrl(it.url);
+        return '<article class="news-item"><div class="top"><span class="ttl">' + esc(it.title) + '</span>' + (it.region ? '<span class="tag">' + esc(it.region) + '</span>' : '') + (it.inWeek === false ? '<span class="tag prior">주차 외 참고</span>' : '') + '</div>' +
+          (it.summary ? '<div class="sum">' + esc(it.summary) + '</div>' : '') +
+          (it.impact ? '<div class="imp"><b>영향</b>' + esc(it.impact) + '</div>' : '') +
+          '<div class="src">' + (it.date ? '<span class="num">' + esc(it.date) + '</span>' : '') + (it.source ? '<span>' + esc(it.source) + '</span>' : '') +
+          (url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">원문 보기</a>' : '') +
+          (st.db ? '<button type="button" class="del" data-del="' + x.i + '" aria-label="이 뉴스 삭제">삭제</button>' : '') + '</div></article>';
+      }).join('') + '</div></div>';
+    });
+    html += '</section>';
+    if (st.db) {
+      html += '<section class="sec"><div class="sec-h"><h2>뉴스 직접 추가</h2><span>' + esc(r.date) + ' 주차에 추가됩니다</span></div><div class="card"><div class="news-form">' +
+        '<label class="field">분류<select id="nf-cat">' + NEWS_CATS.map(function (c) { return '<option>' + c + '</option>'; }).join('') + '</select></label>' +
+        '<label class="field">지역<input type="text" id="nf-region" placeholder="예: 호치민, 전국"></label>' +
+        '<label class="field">날짜<input type="date" id="nf-date" value="' + esc(r.date) + '"></label>' +
+        '<label class="field">출처<input type="text" id="nf-source" placeholder="예: VnExpress"></label>' +
+        '<label class="field full">제목<input type="text" id="nf-title" placeholder="핵심을 한 줄로"></label>' +
+        '<label class="field full">핵심 내용<textarea id="nf-summary" placeholder="숫자·날짜 중심으로 1~2문장"></textarea></label>' +
+        '<label class="field full">OMH 영향<input type="text" id="nf-impact" placeholder="어느 도시 수요가 늘거나 줄지"></label>' +
+        '<label class="field full">원문 링크<input type="url" id="nf-url" placeholder="https://"></label>' +
+        '</div><div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap"><button class="btn primary" type="button" id="nf-add">추가</button><span class="status" id="nf-status" role="status"></span></div></div></section>';
+    }
+    return html;
+  }
+  function saveNews(r, mutate, okMsg) {
+    var n = newsFor(r);
+    var id = n.exact ? n.id : r.country + '_' + r.date;
+    var base = n.exact && n.doc ? JSON.parse(JSON.stringify(n.doc)) : { country: r.country, date: r.date, weekFrom: SCM.addDays(r.date, -6), weekTo: r.date, items: [] };
+    mutate(base.items);
+    base.updatedAt = new Date().toISOString();
+    var el = $('#nf-status');
+    return st.db.doc('news/' + id).set(base).then(function () { if (el) el.textContent = okMsg; }, function (e) {
+      if (el) el.textContent = '저장하지 못했습니다 (' + e.code + '). 이 페이지의 편집 권한이 있는지 확인하세요.';
+    });
+  }
+  function bindNews(r) {
+    if (!st.db) return;
+    $$('[data-del]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = '한 번 더 누르면 삭제'; return; }
+        var i = +b.dataset.del;
+        saveNews(r, function (items) { items.splice(i, 1); }, '삭제했습니다.');
+      });
+    });
+    var add = $('#nf-add');
+    if (!add) return;
+    add.addEventListener('click', function () {
+      var v = function (id) { return ($(id).value || '').trim(); };
+      if (!v('#nf-title')) { $('#nf-status').textContent = '제목을 입력하세요.'; return; }
+      var url = v('#nf-url');
+      if (url && !safeUrl(url)) { $('#nf-status').textContent = '링크는 https:// 로 시작해야 합니다.'; return; }
+      var item = { cat: v('#nf-cat'), title: v('#nf-title'), summary: v('#nf-summary'), impact: v('#nf-impact'), region: v('#nf-region'), date: v('#nf-date'), source: v('#nf-source'), url: url, inWeek: true, manual: true };
+      add.disabled = true;
+      saveNews(r, function (items) { items.push(item); }, '추가했습니다.').then(function () { add.disabled = false; });
+    });
   }
 
   /* ---------- 주차 추이 ---------- */

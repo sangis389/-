@@ -27,3 +27,9 @@
    - 규모(2026-10 기준): VN 약 8.8만 건(약 40분), TH 약 2.6천 건(약 18분).
 3. `config/settings` 를 읽어 `node build_report.js <rows.json> <VN|TH> <D> <settings.json> <out.json>`.
 4. `reports/<CC>_<D>` 로 저장(ArtifactData set). 기존 보고서는 지우지 않는다(주차 추이에 사용).
+
+## 시장·뉴스 (매주 보고서와 함께)
+- 페이지 저장소 `news/<CC>_<기준일>`: `{country, date, weekFrom, weekTo, updatedBy, items:[{cat, title, summary, impact, region, date, inWeek, source, url}]}`
+- cat: 항공 · 공항·인프라 · 정책·통계 · 날씨·재해 · 행사·이벤트 · OTA·프로모션 · 기타
+- 기준일 직전 7일(weekFrom~weekTo)에 나온 뉴스 위주, 주차 밖 중요 항목은 inWeek:false. 출처 URL이 있는 내용만, 단일 2차 출처는 제목에 (미확인).
+- 확인 대상: 항공 증편·감편/신규 취항, 롱탄공항 등 인프라, 비자·관광 정책과 입국 통계, 날씨·재해, 도시 행사, Agoda·Trip.com·Booking.com·Traveloka 캠페인.
