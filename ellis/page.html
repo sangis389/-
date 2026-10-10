@@ -168,7 +168,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
       <button class="btn" type="button" id="btn-cancel" hidden>중지</button>
     </div>
     <div class="progress" aria-hidden="true"><div id="prog"></div></div>
-    <div class="status" id="gen-status" role="status" aria-live="polite">국가와 기준일을 고르고 생성을 누르세요. 베트남은 2~4분 정도 걸립니다.</div>
+    <div class="status" id="gen-status" role="status" aria-live="polite">국가와 기준일을 고르고 생성을 누르세요. ELLIS 부하를 줄이려고 한 번에 1건씩 조회해서 베트남은 5분 안팎 걸립니다.</div>
   </section>
 
   <div id="view"></div>
@@ -181,7 +181,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
   'use strict';
   var SERVER = 'ELLIS_MCP';
   var TOOL = 'get_hotel_bookings';
-  var PAGE = 500, PARALLEL = 4;
+  var PAGE = 1000, PARALLEL = 1; // ELLIS는 동시 조회를 제한하므로 한 번에 1건씩
   var CC_NAME = { VN: '베트남', TH: '태국' };
   var MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 
@@ -254,17 +254,32 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     return 'ELLIS 조회 중 오류가 났습니다 (' + (c || 'unknown') + '): ' + (e && e.message ? e.message : '');
   }
 
-  function call(args, signal) {
+  // ELLIS가 동시 조회 한도에 걸렸다고 답하면(bulkhead_full) 기다렸다가 다시 시도
+  var WAITS = [3000, 6000, 12000, 20000, 30000, 45000];
+  function busy(e) {
+    if (!e || e.code === 'cancelled') return false;
+    if (e.retryable) return true;
+    return /bulkhead|UPSTREAM_UNAVAILABLE|Too many concurrent|rate.?limit|429|503/i.test(String(e.message || ''));
+  }
+  function once(args, signal) {
     return st.mcp.callTool(SERVER, TOOL, args, { cache: false, signal: signal }).then(function (res) {
       var p = res && res.payload;
-      if (typeof p === 'string') { try { p = JSON.parse(p); } catch (x) { throw { code: 'tool_error', message: p.slice(0, 200) }; } }
+      if (typeof p === 'string') { try { p = JSON.parse(p); } catch (x) { throw { code: 'tool_error', message: p.slice(0, 300) }; } }
+      if (p && p.code && !Array.isArray(p.list)) throw { code: 'tool_error', message: JSON.stringify(p).slice(0, 300) };
       if (!p || !Array.isArray(p.list)) throw { code: 'tool_error', message: '예상과 다른 응답 형식' };
       return p;
-    }).catch(function (e) {
-      if (e && e.retryable) {
-        return new Promise(function (ok) { setTimeout(ok, (e.retryAfterMs || 1500) + Math.random() * 1000); })
-          .then(function () { return st.mcp.callTool(SERVER, TOOL, args, { cache: false, signal: signal }); })
-          .then(function (res) { var p = res.payload; if (typeof p === 'string') p = JSON.parse(p); return p; });
+    });
+  }
+  function call(args, signal, attempt) {
+    attempt = attempt || 0;
+    return once(args, signal).catch(function (e) {
+      if (busy(e) && attempt < WAITS.length) {
+        var wait = Math.max(WAITS[attempt], e.retryAfterMs || 0) + Math.random() * 1500;
+        if (st.onWait) st.onWait(Math.round(wait / 1000), attempt + 1);
+        return new Promise(function (ok) { setTimeout(ok, wait); }).then(function () {
+          if (signal && signal.aborted) throw { code: 'cancelled' };
+          return call(args, signal, attempt + 1);
+        });
       }
       throw e;
     });
@@ -273,7 +288,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
   // 작업 큐를 PARALLEL 개씩 처리. 첫 페이지에서 totalCount를 보고 나머지 페이지를 큐에 추가
   function fetchAll(cc, plan, signal, onProgress) {
     var rows = { main: [], ly: [] }, queue = [], done = 0, total = plan.length, got = 0;
-    plan.forEach(function (w) { queue.push({ w: w, offset: 0 }); });
+    plan.forEach(function (w) { queue.push({ w: w, offset: 0, limit: PAGE, first: true }); });
     return new Promise(function (resolve, reject) {
       var active = 0, failed = false;
       function next() {
@@ -283,19 +298,30 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
       }
       function run(job) {
         active++;
-        call({ dateBasis: 'CHECK_OUT_DATE', fromDate: job.w.from, toDate: job.w.to, countryCode: cc, limit: PAGE, offset: job.offset }, signal)
+        call({ dateBasis: 'CHECK_OUT_DATE', fromDate: job.w.from, toDate: job.w.to, countryCode: cc, limit: job.limit, offset: job.offset }, signal)
           .then(function (p) {
             var bucket = job.w.ly ? rows.ly : rows.main;
             for (var i = 0; i < p.list.length; i++) bucket.push(SCM.slimRow(p.list[i]));
             got += p.list.length;
-            if (job.offset === 0 && p.totalCount > PAGE) {
-              for (var o = PAGE; o < p.totalCount; o += PAGE) { queue.push({ w: job.w, offset: o }); total++; }
+            if (job.first && p.totalCount > PAGE) {
+              for (var o = PAGE; o < p.totalCount; o += PAGE) { queue.push({ w: job.w, offset: o, limit: PAGE }); total++; }
             }
             done++; active--;
             onProgress(done, total, got);
-            next();
+            setTimeout(next, 300); // 연속 호출 사이에 잠깐 쉬어 ELLIS 부하를 줄인다
           })
-          .catch(function (e) { failed = true; active--; reject(e); });
+          .catch(function (e) {
+            active--;
+            // 응답이 너무 커서 실패한 것일 수 있으면 같은 구간을 절반 크기로 나눠 다시 받는다
+            if (!busy(e) && e && e.code !== 'cancelled' && job.limit > 250) {
+              var h = job.limit / 2;
+              queue.unshift({ w: job.w, offset: job.offset, limit: h, first: job.first, firstSpan: true }, { w: job.w, offset: job.offset + h, limit: h });
+              total++;
+              setTimeout(next, 300);
+              return;
+            }
+            failed = true; reject(e);
+          });
       }
       next();
     });
@@ -312,6 +338,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     $('#btn-run').disabled = true; $('#btn-cancel').hidden = false;
     setProg(0); setStatus(CC_NAME[cc] + ' · ' + D + ' 기준으로 ELLIS 조회를 시작합니다…');
     var t0 = Date.now();
+    st.onWait = function (sec, n) { setStatus('ELLIS가 다른 조회를 처리 중이라 ' + sec + '초 후 다시 시도합니다 (' + n + '/' + WAITS.length + '회째)…'); };
     fetchAll(cc, plan, ctrl && ctrl.signal, function (done, total, got) {
       setProg(done / total);
       setStatus('ELLIS 조회 중 · ' + done + '/' + total + '회 · 예약 ' + nf0.format(got) + '건 · ' + Math.round((Date.now() - t0) / 1000) + '초');
@@ -328,7 +355,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
         setStatus('보고서는 만들었지만 저장하지 못했습니다 (' + e.code + '). ' + (e.code === 'invalid_argument' ? '이 페이지에 쓰기 권한이 없을 수 있습니다.' : ''), true);
       });
     }).catch(function (e) { setStatus(errText(e), true); })
-      .then(function () { $('#btn-run').disabled = false; $('#btn-cancel').hidden = true; st.abort = null; });
+      .then(function () { $('#btn-run').disabled = false; $('#btn-cancel').hidden = true; st.abort = null; st.onWait = null; });
   }
 
   /* ---------- 공통 렌더 ---------- */
