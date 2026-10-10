@@ -31,5 +31,8 @@
 ## 시장·뉴스 (매주 보고서와 함께)
 - 페이지 저장소 `news/<CC>_<기준일>`: `{country, date, weekFrom, weekTo, updatedBy, items:[{cat, title, summary, impact, region, date, inWeek, source, url}]}`
 - cat: 항공 · 공항·인프라 · 정책·통계 · 날씨·재해 · 행사·이벤트 · OTA·프로모션 · 기타
-- 기준일 직전 7일(weekFrom~weekTo)에 나온 뉴스 위주, 주차 밖 중요 항목은 inWeek:false. 출처 URL이 있는 내용만, 단일 2차 출처는 제목에 (미확인).
+- 기준일 직전 7일(weekFrom~weekTo)에 나온 뉴스 위주, 주차 밖 중요 항목은 inWeek:false.
+- **출처: 공신력 있는 언론·공식 기관만.** (VnExpress, Tuoi Tre, VietnamPlus/VNA, Viet Nam News, Bangkok Post, The Nation, Thai PBS, TAT News, Reuters, Nikkei, CNA, TTG Asia, Skift 등)
+  블로그, 쿠폰·딜 모음, AeroRoutes 같은 항공편 블로그, 지역 소식지는 쓰지 않는다.
+- **범위: 베트남·태국 인바운드(국내 여행 포함)만.** 다른 나라 소비자 대상 아웃바운드 세일(예: 싱가포르발 OTA 10.10 세일)은 제외.
 - 확인 대상: 항공 증편·감편/신규 취항, 롱탄공항 등 인프라, 비자·관광 정책과 입국 통계, 날씨·재해, 도시 행사, Agoda·Trip.com·Booking.com·Traveloka 캠페인.
