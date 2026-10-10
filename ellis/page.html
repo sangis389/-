@@ -423,7 +423,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     killCharts(); chartBase();
     $$('.seg button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.cc === st.cc)); });
     var list = listFor(st.cc);
-    if (st.current && (!st.reports[st.current] || st.reports[st.current].country !== st.cc)) st.current = list.length ? list[0].id : null;
+    if (!st.current || !st.reports[st.current] || st.reports[st.current].country !== st.cc) st.current = list.length ? list[0].id : null;
     var sel = $('#sel-report');
     sel.innerHTML = list.length ? list.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === st.current ? ' selected' : '') + '>' + esc(x.r.date) + ' 기준</option>'; }).join('') : '<option value="">저장된 보고서 없음</option>';
     sel.disabled = !list.length;
