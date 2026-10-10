@@ -16,10 +16,10 @@ var SCM = (function () {
   function prevMonthStart(s) { var d = parseYmd(monthStart(s)); d.setUTCMonth(d.getUTCMonth() - 1); return ymd(d); }
 
   // fromDate..toDate 를 ELLIS 제한(toDate ≤ fromDate+30일) 안의 구간으로 쪼갠다
-  function windows(from, to) {
+  function windows(from, to, span) {
     var out = [], cur = from;
     while (cur <= to) {
-      var end = addDays(cur, 30);
+      var end = addDays(cur, (span || 31) - 1);
       if (end > to) end = to;
       out.push([cur, end]);
       cur = addDays(end, 1);
@@ -249,8 +249,8 @@ var SCM = (function () {
     var year = +D.slice(0, 4);
     var from = year + '-01-01', pm = prevMonthStart(D);
     if (pm < from) from = pm;
-    var plan = windows(from, year + '-12-31').map(function (w) { return { from: w[0], to: w[1], ly: false }; });
-    if (withLy) windows((year - 1) + '-01-01', (year - 1) + '-12-31').forEach(function (w) { plan.push({ from: w[0], to: w[1], ly: true }); });
+    var plan = windows(from, year + '-12-31', 10).map(function (w) { return { from: w[0], to: w[1], ly: false }; });
+    if (withLy) windows((year - 1) + '-01-01', (year - 1) + '-12-31', 10).forEach(function (w) { plan.push({ from: w[0], to: w[1], ly: true }); });
     return plan;
   }
 
