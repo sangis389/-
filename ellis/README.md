@@ -1,8 +1,29 @@
 # ELLIS 연동 주간 보고 (claude.ai 페이지)
 
-엑셀 업로드 없이 ELLIS 예약 데이터로 주간 보고를 만드는 claude.ai 비공개 페이지의 소스입니다.
+페이지: https://claude.ai/artifact/XnKfy686CRuzMd8JmdY99V
+엑셀 업로드 없이 ELLIS 예약 데이터로 베트남·태국 주간 보고를 만드는 claude.ai 비공개 페이지의 소스입니다.
 
-- `engine.js` — 집계 로직 (체크아웃일 기준 연간 누적, Reserved/Confirmed, 기준일까지 들어온 예약)
+- `engine.js` — 집계 로직
 - `page.html` — 화면. 게시할 때 `<script>/*ENGINE*/</script>` 자리에 `engine.js` 를 넣어 한 파일로 만듭니다.
+- `build_report.js` — 내려받은 예약 행(JSON)으로 보고서 1개를 만드는 스크립트
 
-실적 데이터와 설정(독점·HB 호텔 목록, 지역)은 페이지의 저장소에만 있고 이 저장소에는 없습니다.
+실적 데이터와 설정(독점·HB 호텔 목록, 지역)은 페이지의 저장소(`reports/<CC>_<기준일>`, `config/settings`)에만 있고 이 저장소에는 없습니다.
+
+## 집계 기준
+- 그해 **체크아웃** 예약, 상태 Reserved/Confirmed, 기준일 23:59:59까지 들어온 예약 누적
+  (기준일 이후 취소된 예약은 기준일 시점엔 살아 있었으므로 포함). 엑셀(9/24)과 RN 일치 확인.
+- 전주 = 기준일 −7일 시점, MoM = 당월 체크아웃 OTB vs 전월 체크아웃 실적
+- 금액: 현지통화. 현지통화로 결제된 예약이 없으면(태국) ELLIS fxRate로 KRW 집계
+- 지역: ELLIS 도시명 그대로 RN 상위 12개 + ETC (`config/settings` 의 `autoTop`)
+
+## 매주 진행 (Claude 세션에서 "이번 주 보고서 만들어줘")
+1. 기준일 D = 보고일 전날(서울 기준).
+2. ELLIS `get_hotel_bookings` 로 VN·TH 각각 `dateBasis=CHECK_OUT_DATE`, 올해 1/1~12/31 전체를 받는다.
+   (전월이 작년 12월이면 그 달도 포함.) 매주 **전체를 다시** 받아야 한다 — 지난 예약의 취소를 잡을 방법이 이것뿐.
+   - 동시 호출 금지(bulkhead_full). 한 번에 1건씩.
+   - offset 4,000 이후 깊은 페이지는 시간 초과가 잦다 → 반달·10일 구간으로 나눠 받는다.
+   - 시간 초과가 계속되면 limit 를 100 안팎으로 줄인다.
+   - 받은 행은 bookingItemCode 로 중복 제거 후 JSON 배열 한 파일로 저장. 구간별 totalCount 합과 행 수가 같은지 확인.
+   - 규모(2026-10 기준): VN 약 8.8만 건(약 40분), TH 약 2.6천 건(약 18분).
+3. `config/settings` 를 읽어 `node build_report.js <rows.json> <VN|TH> <D> <settings.json> <out.json>`.
+4. `reports/<CC>_<D>` 로 저장(ArtifactData set). 기존 보고서는 지우지 않는다(주차 추이에 사용).
