@@ -284,47 +284,70 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
   var winCache = {};
   var CACHE_MS = 3 * 60 * 60 * 1000;
 
+  function spanDays(w) { return Math.round((Date.parse(w.to) - Date.parse(w.from)) / 86400000) + 1; }
+  function splitWin(w) {
+    var half = Math.floor(spanDays(w) / 2);
+    var mid = SCM.addDays(w.from, half - 1);
+    return [{ from: w.from, to: mid, ly: w.ly }, { from: SCM.addDays(mid, 1), to: w.to, ly: w.ly }];
+  }
+
+  // 구간을 하나씩 받는다. 시간 초과가 나면 그 구간을 날짜로 반씩 쪼개 다시 받고(최소 1일),
+  // 1일 구간에서도 초과가 나면 건수를 줄여 기다렸다 재시도한다. 바쁨(bulkhead)은 기다렸다 재시도.
   async function fetchAll(cc, plan, signal, onProgress) {
-    var rows = { main: [], ly: [] }, got = 0, done = 0, reused = 0;
-    var limit = PAGE;
-    for (var wi = 0; wi < plan.length; wi++) {
-      var w = plan[wi], key = cc + '|' + w.from + '|' + w.to;
+    var rows = { main: [], ly: [] }, got = 0, reused = 0, calls = 0;
+    var queue = plan.slice(), doneDays = 0;
+    var totalDays = plan.reduce(function (a, w) { return a + spanDays(w); }, 0);
+    st.lastWin = null;
+    while (queue.length) {
+      var w = queue.shift(), key = cc + '|' + w.from + '|' + w.to;
       var bucket = w.ly ? rows.ly : rows.main;
       var c = winCache[key];
       if (c && Date.now() - c.at < CACHE_MS) {
         for (var i = 0; i < c.rows.length; i++) bucket.push(c.rows[i]);
-        got += c.rows.length; done++; reused++;
-        onProgress(done, plan.length, got, reused);
+        got += c.rows.length; reused++; doneDays += spanDays(w);
+        onProgress(doneDays / totalDays, got, reused, calls);
         continue;
       }
-      var wrows = [], offset = 0, totalCount = null, attempt = 0;
+      var wrows = [], offset = 0, totalCount = null, attempt = 0, limit = PAGE, split = false;
       while (totalCount === null || offset < totalCount) {
         if (signal && signal.aborted) throw { code: 'cancelled' };
+        st.lastWin = w.from + '~' + w.to + ' (' + offset + '번째부터 ' + limit + '건)';
         try {
+          calls++;
           var p = await once({ dateBasis: 'CHECK_OUT_DATE', fromDate: w.from, toDate: w.to, countryCode: cc, limit: limit, offset: offset }, signal);
           for (var j = 0; j < p.list.length; j++) wrows.push(SCM.slimRow(p.list[j]));
           totalCount = typeof p.totalCount === 'number' ? p.totalCount : (p.list.length < limit ? offset + p.list.length : Infinity);
           offset += p.list.length;
           if (!p.list.length) break;
           attempt = 0;
-          onProgress(done + Math.min(1, offset / (totalCount || 1)), plan.length, got + wrows.length, reused);
-          await sleep(300, signal);
-          // 성공이 이어지면 건수를 조금씩 원래대로 되돌린다
-          if (limit < PAGE) limit = Math.min(PAGE, limit * 2);
+          onProgress((doneDays + spanDays(w) * Math.min(1, offset / (totalCount || 1))) / totalDays, got + wrows.length, reused, calls);
+          await sleep(400, signal);
         } catch (e) {
-          if (!isBusy(e) || attempt >= WAITS.length) throw e;
+          if (!isBusy(e)) throw e;
+          if (isTimeout(e) && spanDays(w) > 1) {
+            // 이 구간을 반으로 나눠 앞에 다시 넣는다 (받은 일부는 버리고 새로 받음)
+            var halves = splitWin(w);
+            queue.unshift(halves[0], halves[1]);
+            if (st.onWait) st.onWait(3, 0, true, null, w, halves);
+            await sleep(3000 + Math.random() * 1000, signal);
+            split = true;
+            break;
+          }
+          if (attempt >= WAITS.length) throw e;
           if (isTimeout(e) && limit > 100) limit = Math.max(100, Math.floor(limit / 2));
           var wait = Math.max(WAITS[attempt], e.retryAfterMs || 0) + Math.random() * 1500;
           attempt++;
-          if (st.onWait) st.onWait(Math.round(wait / 1000), attempt, isTimeout(e), limit);
+          if (st.onWait) st.onWait(Math.round(wait / 1000), attempt, isTimeout(e), limit, w);
           await sleep(wait, signal);
         }
       }
+      if (split) continue;
       winCache[key] = { at: Date.now(), rows: wrows };
       for (var k = 0; k < wrows.length; k++) bucket.push(wrows[k]);
-      got += wrows.length; done++;
-      onProgress(done, plan.length, got, reused);
+      got += wrows.length; doneDays += spanDays(w);
+      onProgress(doneDays / totalDays, got, reused, calls);
     }
+    st.lastWin = null;
     return rows;
   }
 
@@ -339,12 +362,13 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     $('#btn-run').disabled = true; $('#btn-cancel').hidden = false;
     setProg(0); setStatus(CC_NAME[cc] + ' · ' + D + ' 기준으로 ELLIS 조회를 시작합니다…');
     var t0 = Date.now();
-    st.onWait = function (sec, n, timeout, lim) {
-      setStatus((timeout ? 'ELLIS 응답 시간이 초과되어 한 번에 ' + lim + '건씩으로 줄여 ' : 'ELLIS가 다른 조회를 처리 중이라 ') + sec + '초 후 다시 시도합니다 (' + n + '/' + WAITS.length + '회째)…');
+    st.onWait = function (sec, n, timeout, lim, w, halves) {
+      if (halves) { setStatus('ELLIS가 ' + w.from + '~' + w.to + ' 구간을 시간 안에 처리하지 못해 ' + halves[0].from + '~' + halves[0].to + ', ' + halves[1].from + '~' + halves[1].to + '로 나눠 다시 받습니다…'); return; }
+      setStatus((timeout ? 'ELLIS 응답 시간이 초과되어 한 번에 ' + lim + '건씩으로 줄여 ' : 'ELLIS가 다른 조회를 처리 중이라 ') + sec + '초 후 다시 시도합니다 (' + w.from + '~' + w.to + ', ' + n + '/' + WAITS.length + '회째)…');
     };
-    fetchAll(cc, plan, ctrl && ctrl.signal, function (done, total, got, reused) {
-      setProg(done / total);
-      setStatus('ELLIS 조회 중 · 구간 ' + Math.floor(done) + '/' + total + (reused ? ' (이전에 받은 ' + reused + '개 재사용)' : '') + ' · 예약 ' + nf0.format(got) + '건 · ' + Math.round((Date.now() - t0) / 1000) + '초');
+    fetchAll(cc, plan, ctrl && ctrl.signal, function (frac, got, reused, calls) {
+      setProg(frac);
+      setStatus('ELLIS 조회 중 · ' + Math.round(frac * 100) + '% · 조회 ' + calls + '회' + (reused ? ' (이전에 받은 구간 ' + reused + '개 재사용)' : '') + ' · 예약 ' + nf0.format(got) + '건 · ' + Math.round((Date.now() - t0) / 1000) + '초');
     }).then(function (rows) {
       setStatus('집계 중…');
       var rep = SCM.compute(rows.main, { country: cc, date: D, cfg: cfgOf(cc), lyRows: withLy ? rows.ly : null });
@@ -357,7 +381,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
       }, function (e) {
         setStatus('보고서는 만들었지만 저장하지 못했습니다 (' + e.code + '). ' + (e.code === 'invalid_argument' ? '이 페이지에 쓰기 권한이 없을 수 있습니다.' : ''), true);
       });
-    }).catch(function (e) { setStatus(errText(e) + (e && e.code !== 'cancelled' ? ' 받은 구간은 기억해 두었으니, 잠시 후 다시 누르면 이어서 받습니다.' : ''), true); })
+    }).catch(function (e) { setStatus(errText(e) + (e && e.code !== 'cancelled' ? (st.lastWin ? ' [멈춘 위치: ' + st.lastWin + ']' : '') + ' 받은 구간은 기억해 두었으니, 잠시 후 다시 누르면 이어서 받습니다.' : ''), true); })
       .then(function () { $('#btn-run').disabled = false; $('#btn-cancel').hidden = true; st.abort = null; st.onWait = null; });
   }
 
