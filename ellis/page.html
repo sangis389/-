@@ -650,7 +650,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     var aliases = Object.keys(c.aliases || {}).map(function (k) { return k + ' = ' + c.aliases[k]; }).join('\n');
     return '<section class="sec"><div class="sec-h"><h2>' + CC_NAME[st.cc] + ' 설정</h2><span>바꾼 설정은 다음 생성부터 반영됩니다</span></div><div class="card"><div class="settings">' +
       '<div><label for="s-hotels">독점·HB 호텔 (한 줄에 하나: ELLIS 호텔코드, 표시 라벨)</label><textarea id="s-hotels" spellcheck="false" placeholder="886622&#10;606114, Floating">' + esc(hotels) + '</textarea><p>호텔 코드는 ELLIS 호텔 코드(숫자)입니다. 라벨은 선택입니다.</p></div>' +
-      '<div><label for="s-regions">보고 지역 (한 줄에 하나)</label><textarea id="s-regions" spellcheck="false" placeholder="Ho Chi Minh&#10;Hanoi">' + esc((c.regions || []).join('\n')) + '</textarea><p>목록에 없는 도시는 ETC로 묶습니다. 비워 두면 RN 상위 8개 도시를 자동으로 씁니다.</p></div>' +
+      '<div><label for="s-regions">보고 지역 (한 줄에 하나, 비워 두면 자동)</label><textarea id="s-regions" spellcheck="false" placeholder="Ho Chi Minh&#10;Hanoi">' + esc((c.regions || []).join('\n')) + '</textarea><p>목록에 없는 도시는 ETC로 묶습니다. 비워 두면 ELLIS 도시명 그대로 RN 상위 12개 도시를 쓰고 나머지는 ETC로 묶습니다.</p></div>' +
       '<div><label for="s-aliases">도시명 별칭 (ELLIS 도시 = 보고 지역)</label><textarea id="s-aliases" spellcheck="false" placeholder="Mui Ne = Phan Thiet">' + esc(aliases) + '</textarea><p>"Ho Chi Minh City"처럼 이름만 조금 다른 경우는 자동으로 맞춥니다. 다른 도시를 한 지역으로 묶을 때만 적으세요.</p></div>' +
       '</div><div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap"><button class="btn primary" type="button" id="btn-save-set">설정 저장</button><span class="status" id="set-status" role="status"></span></div></div></section>';
   }
@@ -666,7 +666,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
       var aliases = {};
       $('#s-aliases').value.split('\n').forEach(function (l) { var p = l.split('='); if (p.length === 2 && p[0].trim() && p[1].trim()) aliases[p[0].trim()] = p[1].trim(); });
       var next = JSON.parse(JSON.stringify(st.settings || defaults()));
-      next[st.cc] = { regions: regions, aliases: aliases, hotels: hotels };
+      next[st.cc] = { regions: regions, aliases: aliases, hotels: hotels, autoTop: (cfgOf(st.cc).autoTop || 12) };
       b.disabled = true;
       st.db.doc('config/settings').set(next).then(function () {
         st.settings = next; $('#set-status').textContent = '저장했습니다. 호텔 ' + hotels.length + '곳, 지역 ' + regions.length + '개.';
