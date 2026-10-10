@@ -432,7 +432,9 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
     var body = '';
     if (st.tab === 'settings') body = renderSettings();
     else {
-      body = '<div class="meta"><span><b>' + CC_NAME[r.country] + '</b></span><span>기준일 <b>' + esc(r.date) + '</b> (전주 ' + esc(r.prevDate) + ')</span><span>체크아웃 ' + r.year + '년</span><span>통화 <b>' + esc(r.currency) + '</b></span><span>예약 ' + fi(r.diag && r.diag.unique) + '건 기준</span><span>생성 ' + esc((r.generatedAt || '').slice(0, 16).replace('T', ' ')) + ' UTC</span></div>';
+      body = '<div class="meta"><span><b>' + CC_NAME[r.country] + '</b></span><span>기준일 <b>' + esc(r.date) + '</b> (전주 ' + esc(r.prevDate) + ')</span><span>체크아웃 ' + r.year + '년</span><span>통화 <b>' + esc(r.currency) + '</b></span><span>예약 ' + fi(r.diag && r.diag.unique) + '건 기준</span><span>생성 ' + esc((r.generatedAt || '').slice(0, 16).replace('T', ' ')) + ' UTC</span></div>' +
+        (r.currencyNote ? '<div class="note" style="margin-top:8px">' + esc(r.currencyNote) + '</div>' : '') +
+        (r.diag && r.diag.skippedFx ? '<div class="note warn" style="margin-top:8px">환율을 알 수 없는 예약 ' + fi(r.diag.skippedFx) + '건이 집계에서 빠졌습니다.</div>' : '');
       if (st.tab === 'summary') body += renderSummary(r);
       if (st.tab === 'movers') body += renderMovers(r);
       if (st.tab === 'hb') body += renderHB(r);

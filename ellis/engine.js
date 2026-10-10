@@ -75,6 +75,14 @@ var SCM = (function () {
     };
   }
 
+  // 현지통화로 결제된 예약이 없으면(태국처럼 USD·KRW로만 결제) 현지 환율을 알 수 없으므로
+  // ELLIS가 예약마다 주는 KRW 환율(fxRate)로 원화 집계한다
+  var KRW_FX = { days: ['krw'], rate: function () { return 1; } };
+  function pickFx(rows, local) {
+    var fx = buildFx(rows, local);
+    return fx.days.length ? { local: local, fx: fx } : { local: 'KRW', fx: KRW_FX };
+  }
+
   // 예약 1건의 현지통화 판매가/마진
   function toLocal(r, local, fx) {
     if (r.currency === local) return { sell: +r.billing || 0, margin: +r.revenue || 0 };
@@ -105,12 +113,12 @@ var SCM = (function () {
    * opts: { country, date(D), cfg:{regions,aliases,hotels:[{code,label}]}, lyRows? }
    */
   function compute(rows, opts) {
-    var cc = opts.country, D = opts.date, local = CCY[cc] || 'VND';
+    var cc = opts.country, D = opts.date;
     var year = D.slice(0, 4);
     var T = { cur: D, prev: addDays(D, -7), prev2: addDays(D, -14) };
     var curM = D.slice(0, 7), prevM = prevMonthStart(D).slice(0, 7);
     var cfg = opts.cfg || {};
-    var fx = buildFx(rows, local);
+    var pf = pickFx(rows, CCY[cc] || 'VND'), local = pf.local, fx = pf.fx;
 
     // 1차: 도시별 RN (자동 지역 선택용) + 상태 집계
     var cityRn = {}, statuses = {}, skippedFx = 0;
@@ -217,14 +225,15 @@ var SCM = (function () {
       exclusive: ex,
       diag: { rows: rows.length, unique: Object.keys(seen).length, statuses: statuses, skippedFx: skippedFx, fxDays: fx.days.length },
     };
-    if (opts.lyRows) out.kpi.ly = computeLy(opts.lyRows, cc, D);
+    out.currencyNote = local !== (CCY[cc] || 'VND') ? '현지통화(' + (CCY[cc] || '') + ')로 결제된 예약이 없어 ELLIS 예약 시점 환율로 원화(KRW) 집계' : '';
+    if (opts.lyRows) out.kpi.ly = computeLy(opts.lyRows, cc, D, local);
     return out;
   }
 
   // 전년 동기: 작년 체크아웃 연도, 작년 같은 날 시점
-  function computeLy(rows, cc, D) {
-    var local = CCY[cc] || 'VND', t = addYears(D, -1), year = t.slice(0, 4);
-    var fx = buildFx(rows, local), acc = blank(), seen = {};
+  function computeLy(rows, cc, D, want) {
+    var t = addYears(D, -1), year = t.slice(0, 4);
+    var pf = want === 'KRW' ? { local: 'KRW', fx: KRW_FX } : pickFx(rows, CCY[cc] || 'VND'), local = pf.local, fx = pf.fx, acc = blank(), seen = {};
     rows.forEach(function (r) {
       var key = r.bookingItemCode || (r.bookingCode + '|' + r.hotelCode + '|' + r.checkOutDate);
       if (seen[key]) return; seen[key] = 1;
