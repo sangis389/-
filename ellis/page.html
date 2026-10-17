@@ -596,7 +596,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
       { t: '지난주 픽업', r: 1, v: function (x) { return delta(pick2(x), 'i'); } },
       { t: '증감', r: 1, v: function (x) { return delta(pick(x) - pick2(x), 'i'); } },
     ];
-    return sec('올해 첫 예약 호텔', '<div class="card">' + table(newCols, r.newHotels) + '</div>', '전주 기준일엔 올해 체크아웃 예약이 없다가 이번 주 처음 예약이 들어온 호텔 (RN 순, 최대 10) · 신규 계약 호텔과는 다릅니다') +
+    return sec('전주 대비 예약 발생 호텔', '<div class="card">' + table(newCols, r.newHotels) + '</div>', '전주 기준일까지 올해 체크아웃 예약 0건 → 이번 주 예약 발생 (RN 순, 최대 10)') +
       sec('전주 대비 급감속 호텔', '<div class="card">' + table(hcols, r.dropHotels) + '</div>', '이번 주 픽업이 지난주 픽업보다 가장 크게 줄어든 호텔 (최대 10)') +
       sec('전주 대비 급감속 지역', '<div class="card">' + table(rcols, r.dropRegions) + '</div>', '픽업 = 해당 주에 순증한 RN (신규 − 취소)');
   }
