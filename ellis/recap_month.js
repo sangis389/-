@@ -5,7 +5,7 @@ const all=JSON.parse(fs.readFileSync(f)).map(S.slimRow);
 const m=D.slice(0,7), P=PD||S.addDays(D,-7); // PD: 전주 보고 기준일(선택)
 // 금액은 engine과 같은 환율 규칙을 쓰기 위해 당월 체크아웃 행만 넣어 compute (환율표는 전체 행 기준이 정확하므로 rate만 따로 뽑음)
 const rows=all.filter(r=>(r.checkOutDate||'').slice(0,7)===m);
-const full=(d)=>S.compute(all,{country:cc,date:d,cfg:{}});
+const full=(d)=>S.compute(all,{country:cc,date:d,cfg:{},month:m}); // 전주도 보고 당월(m) 기준
 const cur=full(D), prev=full(P);
 const k=(x)=>x.kpi.monthCur;
 const c=k(cur), p=k(prev);

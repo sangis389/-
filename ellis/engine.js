@@ -116,7 +116,8 @@ var SCM = (function () {
     var cc = opts.country, D = opts.date;
     var year = D.slice(0, 4);
     var T = { cur: D, prev: addDays(D, -7), prev2: addDays(D, -14) };
-    var curM = D.slice(0, 7), prevM = prevMonthStart(D).slice(0, 7);
+    var curM = opts.month || D.slice(0, 7), // opts.month: 다른 달 기준 당월 값 (리캡 전주 비교용)
+        prevM = prevMonthStart(D).slice(0, 7);
     var cfg = opts.cfg || {};
     var pf = pickFx(rows, CCY[cc] || 'VND'), local = pf.local, fx = pf.fx;
 
